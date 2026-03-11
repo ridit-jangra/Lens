@@ -162,23 +162,10 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
           setAllMessages(withTool);
           setCommitted((prev) => [...prev, toolMsg]);
 
-          const nextMessages = approved
-            ? withTool
-            : (() => {
-                const denyNote: Message = {
-                  role: "user",
-                  content: "Tool call was denied by user.",
-                  type: "text",
-                };
-                const withDeny = [...withTool, denyNote];
-                setAllMessages(withDeny);
-                return withDeny;
-              })();
-
           setStage({ type: "thinking" });
-          callChat(provider!, systemPrompt, nextMessages)
-            .then((r) => processResponse(r, nextMessages))
-            .catch(handleError(nextMessages));
+          callChat(provider!, systemPrompt, withTool)
+            .then((r: string) => processResponse(r, withTool))
+            .catch(handleError(withTool));
         },
       });
       return;
@@ -222,7 +209,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     setAllMessages(nextAll);
     setStage({ type: "thinking" });
     callChat(provider, systemPrompt, nextAll)
-      .then((raw) => processResponse(raw, nextAll))
+      .then((raw: string) => processResponse(raw, nextAll))
       .catch(handleError(nextAll));
   };
 
@@ -302,7 +289,10 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             setStage({
               type: "clone-error",
               repoUrl,
-              message: (result as any).error ?? "Clone failed",
+              message:
+                !result.folderExists && result.error
+                  ? result.error
+                  : "Clone failed",
             });
           }
         });
@@ -331,7 +321,10 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             setStage({
               type: "clone-error",
               repoUrl,
-              message: (result as any).error ?? "Clone failed",
+              message:
+                !result.folderExists && result.error
+                  ? result.error
+                  : "Clone failed",
             });
           }
         });

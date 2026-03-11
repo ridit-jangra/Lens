@@ -20,47 +20,55 @@ export function buildSystemPrompt(files: ImportantFile[]): string {
     .map((f) => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 2000)}\n\`\`\``)
     .join("\n\n");
 
-  return `You are an expert software engineer assistant with full context of the user's codebase. You help with questions, explanations, code reviews, debugging, and implementing features.
+  return `You are an expert software engineer assistant. You have access to the user's codebase (listed below) and two tools: shell and fetch.
 
-You have access to two tools you can invoke by including special blocks in your response:
+## TOOL RULES — READ CAREFULLY
 
-**Run a shell command:**
-\`\`\`shell
-<command here>
-\`\`\`
+**You MUST use tools in these situations — never guess or hallucinate:**
+- User shares a URL or GitHub link → use fetch immediately to read it
+- User asks about files, structure, or content of an external repo → use fetch on the GitHub URL
+- User asks you to run something, install something, or check a command → use shell
+- User asks about runtime behavior, test results, or build output → use shell
+- You don't have enough information to answer accurately → use a tool to get it
 
-**Fetch a URL:**
+**NEVER do these things:**
+- Do NOT describe what a URL might contain without fetching it
+- Do NOT guess at file contents of repos you haven't fetched
+- Do NOT say "I'll need to fetch" or "here's the command" — just emit the tool block directly
+- Do NOT ask permission before using a tool — the user will be shown an approval prompt automatically
+
+## TOOL SYNTAX
+
+To fetch a URL (webpage, GitHub repo, raw file, API):
 \`\`\`fetch
-<url here>
+https://example.com
 \`\`\`
 
-The user will be shown the command/URL and asked to approve it before it runs. After approval you will receive the output and can continue your response. Only use these tools when genuinely needed.
+To run a shell command:
+\`\`\`shell
+ls -la
+\`\`\`
 
-**To make code changes**, use this block:
+To make code changes:
 \`\`\`changes
 {
-  "summary": "Brief explanation of what you changed",
+  "summary": "what changed and why",
   "patches": [
-    {
-      "path": "relative/path/to/file.ts",
-      "content": "complete new file content",
-      "isNew": false
-    }
+    { "path": "src/foo.ts", "content": "complete file content here", "isNew": false }
   ]
 }
 \`\`\`
 
-Rules:
-- Always provide COMPLETE file content in patches, never partial
-- isNew = true only for brand new files
-- Only include files that actually need changes
-- If no code changes are needed, respond conversationally
-- You can mix explanatory text with any of these blocks
-- Only include ONE tool call per response — wait for the result before continuing
+## TOOL FLOW
 
-Here is the codebase:
+- Emit exactly ONE tool block per response, then stop
+- After the user approves and you receive the result, continue your response
+- You can chain tools across turns (fetch → shell → changes) as needed
+- Always provide COMPLETE file content in patches, never partial snippets
 
-${fileList}`;
+## CODEBASE
+
+${fileList.length > 0 ? fileList : "(no files indexed)"}`;
 }
 
 // ── Response parser ───────────────────────────────────────────────────────────
@@ -72,32 +80,54 @@ export type ParsedResponse =
   | { kind: "fetch"; content: string; url: string };
 
 export function parseResponse(text: string): ParsedResponse {
-  const changesMatch = text.match(/```changes\n([\s\S]*?)\n```/);
-  if (changesMatch) {
+  // Find the earliest occurrence of any tool block so ordering in the text is respected
+  type Candidate = {
+    index: number;
+    kind: "changes" | "shell" | "fetch";
+    match: RegExpExecArray;
+  };
+  const candidates: Candidate[] = [];
+
+  const patterns: { kind: Candidate["kind"]; re: RegExp }[] = [
+    { kind: "changes", re: /```changes\r?\n([\s\S]*?)\r?\n```/g },
+    { kind: "shell", re: /```shell\r?\n([\s\S]*?)\r?\n```/g },
+    { kind: "fetch", re: /```fetch\r?\n([\s\S]*?)\r?\n```/g },
+  ];
+
+  for (const { kind, re } of patterns) {
+    re.lastIndex = 0;
+    const m = re.exec(text);
+    if (m) candidates.push({ index: m.index, kind, match: m });
+  }
+
+  if (candidates.length === 0) return { kind: "text", content: text.trim() };
+
+  // Pick whichever block starts earliest in the response
+  candidates.sort((a, b) => a.index - b.index);
+  const { kind, match } = candidates[0]!;
+  const before = text.slice(0, match.index).trim();
+  const body = match[1]!.trim();
+
+  if (kind === "changes") {
     try {
-      const parsed = JSON.parse(changesMatch[1]!) as {
+      const parsed = JSON.parse(body) as {
         summary: string;
         patches: FilePatch[];
       };
-      const before = text.slice(0, text.indexOf("```changes")).trim();
       const display = [before, parsed.summary].filter(Boolean).join("\n\n");
       return { kind: "changes", content: display, patches: parsed.patches };
     } catch {
-      /* fall through */
+      // Malformed JSON — fall through to text
     }
   }
 
-  const shellMatch = text.match(/```shell\n([\s\S]*?)\n```/);
-  if (shellMatch) {
-    const command = shellMatch[1]!.trim();
-    const before = text.slice(0, text.indexOf("```shell")).trim();
-    return { kind: "shell", content: before, command };
+  if (kind === "shell") {
+    return { kind: "shell", content: before, command: body };
   }
 
-  const fetchMatch = text.match(/```fetch\n([\s\S]*?)\n```/);
-  if (fetchMatch) {
-    const url = fetchMatch[1]!.trim();
-    const before = text.slice(0, text.indexOf("```fetch")).trim();
+  if (kind === "fetch") {
+    // Strip any accidental markdown or angle brackets the model might add
+    const url = body.replace(/^<|>$/g, "").trim();
     return { kind: "fetch", content: before, url };
   }
 
@@ -111,9 +141,20 @@ function buildApiMessages(
 ): { role: string; content: string }[] {
   return messages.map((m) => {
     if (m.type === "tool") {
+      if (!m.approved) {
+        return {
+          role: "user",
+          content:
+            "The tool call was denied by the user. Please respond without using that tool.",
+        };
+      }
+      const label =
+        m.toolName === "shell"
+          ? `shell command \`${m.content}\``
+          : `fetch of ${m.content}`;
       return {
         role: "user",
-        content: `Tool result (${m.toolName}):\n${m.result}`,
+        content: `Here is the output from the ${label}:\n\n${m.result}\n\nPlease continue your response based on this output.`,
       };
     }
     return { role: m.role, content: m.content };
