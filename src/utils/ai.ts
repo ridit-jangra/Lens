@@ -231,3 +231,5 @@ export async function analyzeRepo(
   const text = await callModel(provider, prompt);
   return parseResult(text);
 }
+
+export const callModelRaw = callModel;
