@@ -4,6 +4,8 @@ import { Command } from "commander";
 import { RepoCommand } from "./commands/repo";
 import { InitCommand } from "./commands/init";
 import { ReviewCommand } from "./commands/review";
+import { PromptCommand } from "./commands/prompt";
+import { ChatCommand } from "./commands/chat";
 
 const program = new Command();
 
@@ -26,6 +28,22 @@ program
   .description("Review a local codebase")
   .action((inputPath) => {
     render(<ReviewCommand path={inputPath ?? "."} />);
+  });
+
+program
+  .command("prompt <text>")
+  .description("Apply a natural language change to the codebase")
+  .option("-p, --path <path>", "Path to the repo", ".")
+  .action((text: string, opts: { path: string }) => {
+    render(<PromptCommand prompt={text} path={opts.path} />);
+  });
+
+program
+  .command("chat")
+  .description("Chat with your codebase — ask questions or make changes")
+  .option("-p, --path <path>", "Path to the repo", ".")
+  .action((opts: { path: string }) => {
+    render(<ChatCommand path={opts.path} />);
   });
 
 program.parse(process.argv);
