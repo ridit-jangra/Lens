@@ -3,9 +3,9 @@ import { Box, Text } from "ink";
 import figures from "figures";
 import { existsSync } from "fs";
 import path from "path";
-import { PromptRunner } from "../components/prompt/PromptRunner";
+import { PromptRunner } from "../components/task/TaskRunner";
 
-export const PromptCommand = ({
+export const TaskCommand = ({
   prompt,
   path: inputPath,
 }: {

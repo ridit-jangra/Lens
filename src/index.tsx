@@ -4,7 +4,7 @@ import { Command } from "commander";
 import { RepoCommand } from "./commands/repo";
 import { InitCommand } from "./commands/init";
 import { ReviewCommand } from "./commands/review";
-import { PromptCommand } from "./commands/prompt";
+import { TaskCommand } from "./commands/task";
 import { ChatCommand } from "./commands/chat";
 
 const program = new Command();
@@ -31,11 +31,11 @@ program
   });
 
 program
-  .command("prompt <text>")
+  .command("task <text>")
   .description("Apply a natural language change to the codebase")
   .option("-p, --path <path>", "Path to the repo", ".")
   .action((text: string, opts: { path: string }) => {
-    render(<PromptCommand prompt={text} path={opts.path} />);
+    render(<TaskCommand prompt={text} path={opts.path} />);
   });
 
 program
