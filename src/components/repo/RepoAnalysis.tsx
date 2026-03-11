@@ -8,6 +8,8 @@ import { ORANGE } from "../../colors";
 import { requestFileList, analyzeRepo } from "../../utils/ai";
 import { ProviderPicker } from "./ProviderPicker";
 import { PreviewRunner } from "./PreviewRunner";
+import { IssueFixer } from "./IssueFixer";
+import { writeLensFile } from "../../utils/lensfile";
 import type { Provider } from "../../types/config";
 import type { AnalysisResult, ImportantFile } from "../../types/repo";
 
@@ -19,6 +21,7 @@ type AnalysisStage =
   | { type: "writing" }
   | { type: "written"; filePath: string }
   | { type: "previewing" }
+  | { type: "fixing"; result: AnalysisResult }
   | { type: "error"; message: string };
 
 const OUTPUT_FILES = ["CLAUDE.md", "copilot-instructions.md"] as const;
@@ -59,34 +62,38 @@ export const RepoAnalysis = ({
   repoPath,
   fileTree,
   files: initialFiles,
+  preloadedResult,
 }: {
   repoUrl: string;
   repoPath: string;
   fileTree: string[];
   files: ImportantFile[];
+  preloadedResult?: AnalysisResult;
 }) => {
-  const [stage, setStage] = useState<AnalysisStage>({
-    type: "picking-provider",
-  });
-  const [selectedOutput, setSelectedOutput] = useState<0 | 1 | 2>(0);
+  const [stage, setStage] = useState<AnalysisStage>(
+    preloadedResult
+      ? { type: "done", result: preloadedResult }
+      : { type: "picking-provider" },
+  );
+  const [selectedOutput, setSelectedOutput] = useState<0 | 1 | 2 | 3>(0);
   const [requestedFiles, setRequestedFiles] = useState<ImportantFile[]>([]);
+  const [provider, setProvider] = useState<Provider | null>(null);
 
-  // 0 = CLAUDE.md, 1 = copilot-instructions.md, 2 = Preview
-  const OPTIONS = [...OUTPUT_FILES, "Preview repo"] as const;
+  const OPTIONS = [...OUTPUT_FILES, "Preview repo", "Fix issues"] as const;
 
-  const handleProviderDone = (provider: Provider) => {
+  const handleProviderDone = (p: Provider) => {
+    setProvider(p);
     setStage({ type: "requesting-files" });
-    requestFileList(repoUrl, repoPath, fileTree, provider)
+    requestFileList(repoUrl, repoPath, fileTree, p)
       .then((files) => {
         setRequestedFiles(files);
         setStage({ type: "analyzing" });
-        return analyzeRepo(
-          repoUrl,
-          files.length > 0 ? files : initialFiles,
-          provider,
-        );
+        return analyzeRepo(repoUrl, files.length > 0 ? files : initialFiles, p);
       })
-      .then((result) => setStage({ type: "done", result }))
+      .then((result) => {
+        writeLensFile(repoPath, result);
+        setStage({ type: "done", result });
+      })
       .catch((err: unknown) =>
         setStage({
           type: "error",
@@ -98,14 +105,18 @@ export const RepoAnalysis = ({
   useInput((_, key) => {
     if (stage.type !== "done") return;
     if (key.leftArrow)
-      setSelectedOutput((i) => Math.max(0, i - 1) as 0 | 1 | 2);
+      setSelectedOutput((i) => Math.max(0, i - 1) as 0 | 1 | 2 | 3);
     if (key.rightArrow)
       setSelectedOutput(
-        (i) => Math.min(OPTIONS.length - 1, i + 1) as 0 | 1 | 2,
+        (i) => Math.min(OPTIONS.length - 1, i + 1) as 0 | 1 | 2 | 3,
       );
     if (key.return) {
       if (selectedOutput === 2) {
         setStage({ type: "previewing" });
+        return;
+      }
+      if (selectedOutput === 3) {
+        setStage({ type: "fixing", result: stage.result });
         return;
       }
       const fileName = OUTPUT_FILES[selectedOutput] as OutputFile;
@@ -121,9 +132,7 @@ export const RepoAnalysis = ({
         });
       }
     }
-    if (key.escape) {
-      setStage({ type: "written", filePath: "" });
-    }
+    if (key.escape) setStage({ type: "written", filePath: "" });
   });
 
   if (stage.type === "picking-provider") {
@@ -199,6 +208,18 @@ export const RepoAnalysis = ({
         </Text>
         <PreviewRunner repoPath={repoPath} onExit={() => process.exit(0)} />
       </Box>
+    );
+  }
+
+  if (stage.type === "fixing") {
+    return (
+      <IssueFixer
+        repoPath={repoPath}
+        result={stage.result}
+        requestedFiles={requestedFiles}
+        provider={provider!}
+        onDone={() => setStage({ type: "done", result: stage.result })}
+      />
     );
   }
 
