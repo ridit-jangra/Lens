@@ -4,6 +4,7 @@ import figures from "figures";
 import { existsSync } from "fs";
 import path from "path";
 import { ChatRunner } from "../components/chat/ChatRunner";
+import { ACCENT } from "../colors";
 
 export const ChatCommand = ({ path: inputPath }: { path: string }) => {
   const resolvedPath = path.resolve(inputPath);
@@ -18,15 +19,5 @@ export const ChatCommand = ({ path: inputPath }: { path: string }) => {
     );
   }
 
-  return (
-    <Box flexDirection="column">
-      <Box gap={2} marginTop={1}>
-        <Text bold color="cyan">
-          {figures.play} Chat
-        </Text>
-        <Text color="gray">{resolvedPath}</Text>
-      </Box>
-      <ChatRunner repoPath={resolvedPath} />
-    </Box>
-  );
+  return <ChatRunner repoPath={resolvedPath} />;
 };

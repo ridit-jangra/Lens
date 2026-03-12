@@ -14,6 +14,8 @@ import {
   writeFileSync,
 } from "fs";
 
+// ── Prompt builder ────────────────────────────────────────────────────────────
+
 export function buildSystemPrompt(
   files: ImportantFile[],
   historySummary = "",
@@ -22,11 +24,11 @@ export function buildSystemPrompt(
     .map((f) => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 2000)}\n\`\`\``)
     .join("\n\n");
 
-  return `You are an expert software engineer assistant with access to the user's codebase and four tools.
+  return `You are an expert software engineer assistant with access to the user's codebase and six tools.
 
 ## TOOLS
 
-You have exactly four tools. To use a tool you MUST wrap it in the exact XML tags shown below — no other format will work.
+You have exactly six tools. To use a tool you MUST wrap it in the exact XML tags shown below — no other format will work.
 
 ### 1. fetch — load a URL
 <fetch>https://example.com</fetch>
@@ -42,7 +44,13 @@ You have exactly four tools. To use a tool you MUST wrap it in the exact XML tag
 {"path": "data/output.csv", "content": "col1,col2\nval1,val2"}
 </write-file>
 
-### 5. changes — propose code edits (shown as a diff for user approval)
+### 5. search — search the internet for anything you are unsure about
+<search>how to use React useEffect cleanup function</search>
+
+### 6. clone — clone a GitHub repo so you can explore and discuss it
+<clone>https://github.com/owner/repo</clone>
+
+### 7. changes — propose code edits (shown as a diff for user approval)
 <changes>
 {"summary": "what changed and why", "patches": [{"path": "src/foo.ts", "content": "COMPLETE file content", "isNew": false}]}
 </changes>
@@ -54,9 +62,10 @@ You have exactly four tools. To use a tool you MUST wrap it in the exact XML tag
 3. After the user approves and you get the result, continue your analysis in the next response
 4. NEVER print a URL, command, filename, or JSON blob as plain text when you should be using a tool
 5. NEVER say "I'll fetch" / "run this command" / "here's the write-file" — just emit the tag
-6. write-file content field must be the COMPLETE file content, never empty or placeholder
-7. After a write-file succeeds, do NOT repeat it — trust the result
-8. After a write-file succeeds, use read-file to verify the content before telling the user it is done
+6. NEVER use shell to run git clone — always use the clone tag instead
+7. write-file content field must be the COMPLETE file content, never empty or placeholder
+8. After a write-file succeeds, do NOT repeat it — trust the result
+9. After a write-file succeeds, use read-file to verify the content before telling the user it is done
 
 ## FETCH → WRITE FLOW (follow this exactly when saving fetched data)
 
@@ -73,7 +82,11 @@ You have exactly four tools. To use a tool you MUST wrap it in the exact XML tag
 - User asks to run anything → shell it immediately
 - User asks to read a file → read-file it immediately
 - User asks to save/create/write a file → write-file it immediately, then read-file to verify
-- You need more information → use the appropriate tool
+- User shares a GitHub URL and wants to clone/explore/discuss it → use clone immediately, NEVER use shell git clone
+- After clone succeeds, you will see context about the clone in the conversation. Wait for the user to ask a specific question before using any tools. Do NOT auto-read files, do NOT emit any tool tags until the user asks.
+- You are unsure about an API, library, error, concept, or piece of code → search it immediately
+- User asks about something recent or that you might not know → search it immediately
+- You are about to say "I'm not sure" or "I don't know" → search instead of guessing
 
 ## CODEBASE
 
@@ -81,6 +94,8 @@ ${fileList.length > 0 ? fileList : "(no files indexed)"}
 
 ${historySummary}`;
 }
+
+// ── Few-shot examples ─────────────────────────────────────────────────────────
 
 export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
@@ -96,7 +111,6 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content:
       'Here is the output from fetch of https://api.github.com/repos/microsoft/typescript:\n\n{"name":"TypeScript","stargazers_count":100000}\n\nPlease continue your response based on this output.',
   },
-
   {
     role: "assistant",
     content:
@@ -123,13 +137,12 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "user",
     content:
-      'Here is the output from read-file of ts-info.json:\n\nFile: ts-info.json (1 lines)\n\n{\"name\":\"TypeScript\",\"stars\":100000}\n\nPlease continue your response based on this output.',
+      'Here is the output from read-file of ts-info.json:\n\nFile: ts-info.json (1 lines)\n\n{"name":"TypeScript","stars":100000}\n\nPlease continue your response based on this output.',
   },
   {
     role: "assistant",
     content: "Done — saved and verified `ts-info.json`. Data looks correct.",
   },
-
   {
     role: "user",
     content: "what node version am I on",
@@ -147,7 +160,45 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     role: "assistant",
     content: "You're running Node.js v20.11.0.",
   },
+  {
+    role: "user",
+    content: "clone https://github.com/facebook/react",
+  },
+  {
+    role: "assistant",
+    content: "<clone>https://github.com/facebook/react</clone>",
+  },
+  {
+    role: "user",
+    content:
+      "Cloned react to /tmp/react — 2847 files available. You can now read files from this repo using read-file with paths relative to /tmp/react.",
+  },
+  {
+    role: "assistant",
+    content:
+      "Cloned! The React repo has 2847 files. I can read source files, explain how it works, or suggest improvements — just ask.",
+  },
+  {
+    role: "user",
+    content: "what does the ?? operator do in typescript",
+  },
+  {
+    role: "assistant",
+    content: "<search>nullish coalescing operator ?? TypeScript</search>",
+  },
+  {
+    role: "user",
+    content:
+      'Here is the output from web search for "nullish coalescing operator ?? TypeScript":\n\nAnswer: The ?? operator returns the right-hand side when the left-hand side is null or undefined.\n\nPlease continue your response based on this output.',
+  },
+  {
+    role: "assistant",
+    content:
+      "The `??` operator is the nullish coalescing operator. It returns the right side only when the left side is `null` or `undefined`.",
+  },
 ];
+
+// ── Response parser ───────────────────────────────────────────────────────────
 
 export type ParsedResponse =
   | { kind: "text"; content: string }
@@ -160,12 +211,21 @@ export type ParsedResponse =
       content: string;
       filePath: string;
       fileContent: string;
-    };
+    }
+  | { kind: "search"; content: string; query: string }
+  | { kind: "clone"; content: string; repoUrl: string };
 
 export function parseResponse(text: string): ParsedResponse {
   type Candidate = {
     index: number;
-    kind: "changes" | "shell" | "fetch" | "read-file" | "write-file";
+    kind:
+      | "changes"
+      | "shell"
+      | "fetch"
+      | "read-file"
+      | "write-file"
+      | "search"
+      | "clone";
     match: RegExpExecArray;
   };
   const candidates: Candidate[] = [];
@@ -175,12 +235,14 @@ export function parseResponse(text: string): ParsedResponse {
     { kind: "shell", re: /<shell>([\s\S]*?)<\/shell>/g },
     { kind: "read-file", re: /<read-file>([\s\S]*?)<\/read-file>/g },
     { kind: "write-file", re: /<write-file>([\s\S]*?)<\/write-file>/g },
+    { kind: "search", re: /<search>([\s\S]*?)<\/search>/g },
+    { kind: "clone", re: /<clone>([\s\S]*?)<\/clone>/g },
     { kind: "changes", re: /<changes>([\s\S]*?)<\/changes>/g },
-
     { kind: "fetch", re: /```fetch\r?\n([\s\S]*?)\r?\n```/g },
     { kind: "shell", re: /```shell\r?\n([\s\S]*?)\r?\n```/g },
     { kind: "read-file", re: /```read-file\r?\n([\s\S]*?)\r?\n```/g },
     { kind: "write-file", re: /```write-file\r?\n([\s\S]*?)\r?\n```/g },
+    { kind: "search", re: /```search\r?\n([\s\S]*?)\r?\n```/g },
     { kind: "changes", re: /```changes\r?\n([\s\S]*?)\r?\n```/g },
   ];
 
@@ -205,21 +267,21 @@ export function parseResponse(text: string): ParsedResponse {
       };
       const display = [before, parsed.summary].filter(Boolean).join("\n\n");
       return { kind: "changes", content: display, patches: parsed.patches };
-    } catch {}
+    } catch {
+      // fall through
+    }
   }
 
-  if (kind === "shell") {
+  if (kind === "shell")
     return { kind: "shell", content: before, command: body };
-  }
 
   if (kind === "fetch") {
     const url = body.replace(/^<|>$/g, "").trim();
     return { kind: "fetch", content: before, url };
   }
 
-  if (kind === "read-file") {
+  if (kind === "read-file")
     return { kind: "read-file", content: before, filePath: body };
-  }
 
   if (kind === "write-file") {
     try {
@@ -230,11 +292,42 @@ export function parseResponse(text: string): ParsedResponse {
         filePath: parsed.path,
         fileContent: parsed.content,
       };
-    } catch {}
+    } catch {
+      // fall through
+    }
+  }
+
+  if (kind === "search")
+    return { kind: "search", content: before, query: body };
+
+  if (kind === "clone") {
+    const url = body.replace(/^<|>$/g, "").trim();
+    return { kind: "clone", content: before, repoUrl: url };
   }
 
   return { kind: "text", content: text.trim() };
 }
+
+// ── Clone tag helper ──────────────────────────────────────────────────────────
+
+export function parseCloneTag(text: string): string | null {
+  const m = text.match(/<clone>([\s\S]*?)<\/clone>/);
+  return m ? m[1]!.trim() : null;
+}
+
+// ── GitHub URL detection ──────────────────────────────────────────────────────
+
+export function extractGithubUrl(text: string): string | null {
+  const match = text.match(/https?:\/\/github\.com\/[\w.-]+\/[\w.-]+/);
+  return match ? match[0]! : null;
+}
+
+export function toCloneUrl(url: string): string {
+  const clean = url.replace(/\/+$/, "");
+  return clean.endsWith(".git") ? clean : `${clean}.git`;
+}
+
+// ── API call ──────────────────────────────────────────────────────────────────
 
 function buildApiMessages(
   messages: Message[],
@@ -255,7 +348,9 @@ function buildApiMessages(
             ? `fetch of ${m.content}`
             : m.toolName === "read-file"
               ? `read-file of ${m.content}`
-              : `write-file to ${m.content}`;
+              : m.toolName === "search"
+                ? `web search for "${m.content}"`
+                : `write-file to ${m.content}`;
       return {
         role: "user",
         content: `Here is the output from the ${label}:\n\n${m.result}\n\nPlease continue your response based on this output.`,
@@ -323,15 +418,7 @@ export async function callChat(
   }
 }
 
-export function extractGithubUrl(text: string): string | null {
-  const match = text.match(/https?:\/\/github\.com\/[\w.-]+\/[\w.-]+/);
-  return match ? match[0]! : null;
-}
-
-export function toCloneUrl(url: string): string {
-  const clean = url.replace(/\/+$/, "");
-  return clean.endsWith(".git") ? clean : `${clean}.git`;
-}
+// ── Clipboard read ────────────────────────────────────────────────────────────
 
 export function readClipboard(): string {
   try {
@@ -366,6 +453,8 @@ export function readClipboard(): string {
     return "";
   }
 }
+
+// ── File system ───────────────────────────────────────────────────────────────
 
 const SKIP_DIRS = new Set([
   "node_modules",
@@ -413,6 +502,8 @@ export function applyPatches(repoPath: string, patches: FilePatch[]): void {
   }
 }
 
+// ── Tool execution ────────────────────────────────────────────────────────────
+
 export async function runShell(command: string, cwd: string): Promise<string> {
   try {
     const out = execSync(command, { cwd, timeout: 15000, encoding: "utf-8" });
@@ -423,6 +514,8 @@ export async function runShell(command: string, cwd: string): Promise<string> {
     return combined || e.message || "Command failed";
   }
 }
+
+// ── HTML table / list extractor ───────────────────────────────────────────────
 
 function stripTags(html: string): string {
   return html
@@ -543,14 +636,120 @@ export async function fetchUrl(url: string): Promise<string> {
   return parts.join("\n\n");
 }
 
+// ── Web search ────────────────────────────────────────────────────────────────
+
+export async function searchWeb(query: string): Promise<string> {
+  const encoded = encodeURIComponent(query);
+
+  const ddgUrl = `https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`;
+  try {
+    const res = await fetch(ddgUrl, {
+      headers: { "User-Agent": "Lens/1.0" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as {
+        AbstractText?: string;
+        AbstractURL?: string;
+        RelatedTopics?: { Text?: string; FirstURL?: string }[];
+        Answer?: string;
+        Infobox?: { content?: { label: string; value: string }[] };
+      };
+
+      const parts: string[] = [`Search: ${query}`];
+      if (data.Answer) parts.push(`Answer: ${data.Answer}`);
+      if (data.AbstractText) {
+        parts.push(`Summary: ${data.AbstractText}`);
+        if (data.AbstractURL) parts.push(`Source: ${data.AbstractURL}`);
+      }
+      if (data.Infobox?.content?.length) {
+        const fields = data.Infobox.content
+          .slice(0, 8)
+          .map((f) => `  ${f.label}: ${f.value}`)
+          .join("\n");
+        parts.push(`Info:\n${fields}`);
+      }
+      if (data.RelatedTopics?.length) {
+        const topics = (data.RelatedTopics as { Text?: string }[])
+          .filter((t) => t.Text)
+          .slice(0, 5)
+          .map((t) => `  - ${t.Text}`)
+          .join("\n");
+        if (topics) parts.push(`Related:\n${topics}`);
+      }
+
+      const result = parts.join("\n\n");
+      if (result.length > 60) return result;
+    }
+  } catch {
+    // fall through to HTML scrape
+  }
+
+  try {
+    const htmlUrl = `https://html.duckduckgo.com/html/?q=${encoded}`;
+    const res = await fetch(htmlUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html",
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+
+    const snippets: string[] = [];
+    const snippetRe = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+    let m: RegExpExecArray | null;
+    while ((m = snippetRe.exec(html)) !== null && snippets.length < 6) {
+      const text = m[1]!
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/\s+/g, " ")
+        .trim();
+      if (text.length > 20) snippets.push(`- ${text}`);
+    }
+
+    const links: string[] = [];
+    const linkRe = /class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g;
+    while ((m = linkRe.exec(html)) !== null && links.length < 5) {
+      const title = m[2]!.replace(/<[^>]+>/g, "").trim();
+      const href = m[1]!;
+      if (title && href) links.push(`  ${title} \u2014 ${href}`);
+    }
+
+    if (snippets.length === 0 && links.length === 0) {
+      return `No results found for: ${query}`;
+    }
+
+    const parts = [`Search results for: ${query}`];
+    if (snippets.length > 0) parts.push(`Snippets:\n${snippets.join("\n")}`);
+    if (links.length > 0) parts.push(`Links:\n${links.join("\n")}`);
+    return parts.join("\n\n");
+  } catch (err) {
+    return `Search failed: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
+
+// ── File tools ────────────────────────────────────────────────────────────────
+
 export function readFile(filePath: string, repoPath: string): string {
-  const candidates = [filePath, path.join(repoPath, filePath)];
+  // If absolute path given, use it directly
+  // If relative, try: as-is, then under repoPath
+  // Do NOT silently fall back to a different repo — require the model to use full paths
+  const candidates = path.isAbsolute(filePath)
+    ? [filePath]
+    : [filePath, path.join(repoPath, filePath)];
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
       try {
         const content = readFileSync(candidate, "utf-8");
         const lines = content.split("\n").length;
-        return `File: ${filePath} (${lines} lines)\n\n${content.slice(0, 8000)}${
+        return `File: ${candidate} (${lines} lines)\n\n${content.slice(0, 8000)}${
           content.length > 8000 ? "\n\n… (truncated)" : ""
         }`;
       } catch (err) {
@@ -558,7 +757,7 @@ export function readFile(filePath: string, repoPath: string): string {
       }
     }
   }
-  return `File not found: ${filePath}`;
+  return `File not found: ${filePath}. If reading from a cloned repo, use the full absolute path e.g. C:\\Users\\...\\repo\\file.ts`;
 }
 
 export function writeFile(

@@ -1,41 +1,54 @@
-import type { DiffLine, FilePatch } from "../components/repo/DiffViewer";
+import type { FilePatch, DiffLine } from "../components/repo/DiffViewer";
 
-export type Role = "user" | "assistant";
-
-export type Message =
-  | { role: Role; content: string; type: "text" }
-  | {
-      role: "assistant";
-      content: string;
-      type: "plan";
-      patches: FilePatch[];
-      applied: boolean;
-    }
-  | {
-      role: "assistant";
-      content: string;
-      type: "tool";
-      toolName: string;
-      result: string;
-      approved: boolean;
-    };
+// ── Tool calls ────────────────────────────────────────────────────────────────
 
 export type ToolCall =
   | { type: "shell"; command: string }
   | { type: "fetch"; url: string }
   | { type: "read-file"; filePath: string }
-  | { type: "write-file"; filePath: string; fileContent: string };
+  | { type: "write-file"; filePath: string; fileContent: string }
+  | { type: "search"; query: string };
+
+// ── Messages ──────────────────────────────────────────────────────────────────
+
+export type Message =
+  | { role: "user" | "assistant"; type: "text"; content: string }
+  | {
+      role: "assistant";
+      type: "tool";
+      toolName: "shell" | "fetch" | "read-file" | "write-file" | "search";
+      content: string;
+      result: string;
+      approved: boolean;
+    }
+  | {
+      role: "assistant";
+      type: "plan";
+      content: string;
+      patches: FilePatch[];
+      applied: boolean;
+    };
+
+// ── Chat stage ────────────────────────────────────────────────────────────────
 
 export type ChatStage =
   | { type: "picking-provider" }
   | { type: "loading" }
   | { type: "idle" }
   | { type: "thinking" }
+  | { type: "error"; message: string }
+  | {
+      type: "permission";
+      tool: ToolCall;
+      pendingMessages: Message[];
+      resolve: (approved: boolean) => void;
+    }
   | {
       type: "preview";
       patches: FilePatch[];
       diffLines: DiffLine[][];
       scrollOffset: number;
+      pendingMessages: Message[];
     }
   | {
       type: "viewing-file";
@@ -43,19 +56,14 @@ export type ChatStage =
       diffLines: DiffLine[];
       scrollOffset: number;
     }
+  | { type: "clone-offer"; repoUrl: string; launchAnalysis?: boolean }
+  | { type: "cloning"; repoUrl: string }
+  | { type: "clone-exists"; repoUrl: string; repoPath: string }
   | {
-      type: "permission";
-      tool: ToolCall;
-      pendingMessages: Message[];
-      resolve: (approved: boolean) => void;
-    }
-  | { type: "clone-offer"; repoUrl: string; cloneUrl: string }
-  | { type: "cloning"; repoUrl: string; cloneUrl: string }
-  | {
-      type: "clone-exists";
+      type: "clone-done";
       repoUrl: string;
-      cloneUrl: string;
-      repoPath: string;
+      destPath: string;
+      fileCount: number;
+      launchAnalysis?: boolean;
     }
-  | { type: "clone-done"; repoUrl: string; destPath: string; fileCount: number }
-  | { type: "clone-error"; repoUrl: string; message: string };
+  | { type: "clone-error"; message: string };

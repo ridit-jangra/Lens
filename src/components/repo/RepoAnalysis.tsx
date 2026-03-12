@@ -4,7 +4,7 @@ import figures from "figures";
 import { useState } from "react";
 import { writeFileSync } from "fs";
 import path from "path";
-import { ORANGE } from "../../colors";
+import { ACCENT } from "../../colors";
 import { requestFileList, analyzeRepo } from "../../utils/ai";
 import { ProviderPicker } from "./ProviderPicker";
 import { PreviewRunner } from "./PreviewRunner";
@@ -142,7 +142,7 @@ export const RepoAnalysis = ({
   if (stage.type === "requesting-files") {
     return (
       <Box marginTop={1}>
-        <Text color={ORANGE}>
+        <Text color={ACCENT}>
           <Spinner />
         </Text>
         <Box marginLeft={1}>
@@ -156,7 +156,7 @@ export const RepoAnalysis = ({
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
         <Box>
-          <Text color={ORANGE}>
+          <Text color={ACCENT}>
             <Spinner />
           </Text>
           <Box marginLeft={1}>
@@ -180,7 +180,7 @@ export const RepoAnalysis = ({
   if (stage.type === "writing") {
     return (
       <Box marginTop={1}>
-        <Text color={ORANGE}>
+        <Text color={ACCENT}>
           <Spinner />
         </Text>
         <Box marginLeft={1}>

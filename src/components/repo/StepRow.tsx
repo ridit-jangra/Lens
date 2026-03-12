@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
 import Spinner from "ink-spinner";
 import figures from "figures";
-import { ORANGE } from "../../colors";
+import { ACCENT } from "../../colors";
 import type { Step } from "../../types/repo";
 
 const LABELS: Record<string, string> = {
@@ -47,7 +47,7 @@ export const StepRow = ({ step }: { step: Step }) => {
 
   return (
     <Box>
-      <Text color={ORANGE}>
+      <Text color={ACCENT}>
         <Spinner />
       </Text>
       <Box marginLeft={1}>

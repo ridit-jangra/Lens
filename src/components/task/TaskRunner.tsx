@@ -5,7 +5,7 @@ import figures from "figures";
 import { useState } from "react";
 import { writeFileSync, existsSync, mkdirSync } from "fs";
 import path from "path";
-import { ORANGE } from "../../colors";
+import { ACCENT } from "../../colors";
 import { callModelRaw } from "../../utils/ai";
 import { DiffViewer, buildDiffs } from "../repo/DiffViewer";
 import { ProviderPicker } from "../repo/ProviderPicker";
@@ -233,11 +233,9 @@ export const PromptRunner = ({
       if (key.downArrow)
         setStage({ ...stage, scrollOffset: stage.scrollOffset + 1 });
       if (key.escape || key.return) {
-        
-        
         setStage((prev) => {
           if (prev.type !== "viewing-file") return prev;
-          
+
           process.exit(0);
           return prev;
         });
@@ -250,16 +248,14 @@ export const PromptRunner = ({
     }
   });
 
-  
   if (stage.type === "picking-provider") {
     return <ProviderPicker onDone={handleProviderDone} />;
   }
 
-  
   if (stage.type === "reading-files") {
     return (
       <Box marginTop={1} gap={1}>
-        <Text color={ORANGE}>
+        <Text color={ACCENT}>
           <Spinner />
         </Text>
         <Text>Reading codebase...</Text>
@@ -267,12 +263,11 @@ export const PromptRunner = ({
     );
   }
 
-  
   if (stage.type === "thinking") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
         <Box gap={1}>
-          <Text color={ORANGE}>
+          <Text color={ACCENT}>
             <Spinner />
           </Text>
           <Text>
@@ -288,7 +283,6 @@ export const PromptRunner = ({
     );
   }
 
-  
   if (stage.type === "preview") {
     const { plan, diffLines, scrollOffset } = stage;
     return (
@@ -317,11 +311,10 @@ export const PromptRunner = ({
     );
   }
 
-  
   if (stage.type === "applying") {
     return (
       <Box marginTop={1} gap={1}>
-        <Text color={ORANGE}>
+        <Text color={ACCENT}>
           <Spinner />
         </Text>
         <Text>Applying changes...</Text>
@@ -329,7 +322,6 @@ export const PromptRunner = ({
     );
   }
 
-  
   if (stage.type === "done") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
@@ -359,7 +351,6 @@ export const PromptRunner = ({
     );
   }
 
-  
   if (stage.type === "viewing-file") {
     const { file, diffLines, scrollOffset } = stage;
     return (
@@ -383,7 +374,6 @@ export const PromptRunner = ({
     );
   }
 
-  
   if (stage.type === "error") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>

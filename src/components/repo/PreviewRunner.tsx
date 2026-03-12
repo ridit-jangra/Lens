@@ -2,7 +2,7 @@ import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import figures from "figures";
 import { useEffect, useState, useRef } from "react";
-import { ORANGE } from "../../colors";
+import { ACCENT } from "../../colors";
 import { detectPreview, runInstall, runDev } from "../../utils/preview";
 import type { PreviewProcess } from "../../utils/preview";
 
@@ -116,7 +116,7 @@ export const PreviewRunner = ({
   if (stage.type === "detecting") {
     return (
       <Box marginTop={1}>
-        <Text color={ORANGE}>
+        <Text color={ACCENT}>
           <Spinner />
         </Text>
         <Box marginLeft={1}>
@@ -141,7 +141,7 @@ export const PreviewRunner = ({
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
         <Box>
-          <Text color={ORANGE}>
+          <Text color={ACCENT}>
             <Spinner />
           </Text>
           <Box marginLeft={1}>
@@ -163,7 +163,7 @@ export const PreviewRunner = ({
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
         <Box>
-          <Text color={ORANGE}>
+          <Text color={ACCENT}>
             <Spinner />
           </Text>
           <Box marginLeft={1}>
