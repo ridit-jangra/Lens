@@ -32,15 +32,5 @@ export const TaskCommand = ({
     );
   }
 
-  return (
-    <Box flexDirection="column">
-      <Box gap={2} marginTop={1}>
-        <Text bold color="cyan">
-          {figures.play} Prompt
-        </Text>
-        <Text color="gray">"{prompt}"</Text>
-      </Box>
-      <PromptRunner repoPath={resolvedPath} userPrompt={prompt} />
-    </Box>
-  );
+  return <PromptRunner repoPath={resolvedPath} userPrompt={prompt} />;
 };

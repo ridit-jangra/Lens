@@ -1,36 +1,57 @@
 import { Box, Text } from "ink";
 import Spinner from "ink-spinner";
-import figures from "figures";
 import { ACCENT } from "../../colors";
+import { useThinkingPhrase, type ThinkingKind } from "../../utils/thinking";
 import type { Step } from "../../types/repo";
 
 const LABELS: Record<string, string> = {
-  cloning: "Cloning repository",
-  "fetching-tree": "Fetching repository structure",
-  "reading-files": "Reading important files",
+  cloning: "cloning repository",
+  "fetching-tree": "fetching repository structure",
+  "reading-files": "reading important files",
 };
+
+const kindMap: Record<string, ThinkingKind> = {
+  cloning: "cloning",
+  "fetching-tree": "analyzing",
+  "reading-files": "analyzing",
+};
+
+function ActiveStep({ type }: { type: string }) {
+  const phrase = useThinkingPhrase(true, kindMap[type], 4321);
+  const label = LABELS[type] ?? type;
+  return (
+    <Box gap={1}>
+      <Text color={ACCENT}>
+        <Spinner />
+      </Text>
+      <Text color={ACCENT}>{phrase}</Text>
+    </Box>
+  );
+}
 
 export const StepRow = ({ step }: { step: Step }) => {
   if (step.type === "error") {
     return (
-      <Text color="red">
-        {figures.cross} {step.message}
-      </Text>
+      <Box gap={1}>
+        <Text color="red">✗</Text>
+        <Text color="red">{step.message}</Text>
+      </Box>
     );
   }
 
   if (step.type === "folder-exists") {
     return (
-      <Box flexDirection="column" gap={1}>
-        <Text color="yellow">
-          {figures.warning} Folder already exists: {step.repoPath}
-        </Text>
-        <Text>
-          Delete it and re-clone?{"  "}
-          <Text color="green">[y] yes</Text>
-          {"  "}
-          <Text color="red">[n] no, use existing</Text>
-        </Text>
+      <Box flexDirection="column">
+        <Box gap={1}>
+          <Text color="yellow">!</Text>
+          <Text color="gray">folder already exists at </Text>
+          <Text color="white">{step.repoPath}</Text>
+        </Box>
+        <Box gap={1} marginLeft={2}>
+          <Text color="gray" dimColor>
+            y re-clone · n use existing
+          </Text>
+        </Box>
       </Box>
     );
   }
@@ -39,20 +60,12 @@ export const StepRow = ({ step }: { step: Step }) => {
 
   if (step.status === "done") {
     return (
-      <Text color="green">
-        {figures.tick} {label}
-      </Text>
+      <Box gap={1}>
+        <Text color="green">✓</Text>
+        <Text color="gray">{label}</Text>
+      </Box>
     );
   }
 
-  return (
-    <Box>
-      <Text color={ACCENT}>
-        <Spinner />
-      </Text>
-      <Box marginLeft={1}>
-        <Text>{label}...</Text>
-      </Box>
-    </Box>
-  );
+  return <ActiveStep type={step.type} />;
 };

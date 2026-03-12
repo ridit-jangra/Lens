@@ -3,10 +3,10 @@ import figures from "figures";
 import { useState } from "react";
 import { nanoid } from "nanoid";
 import { addProvider, loadConfig } from "../utils/config";
-import { ProviderTypeStep } from "../components/init/ProviderTypeStep";
-import { ApiKeyStep } from "../components/init/ApiKeyStep";
-import { ModelStep } from "../components/init/ModelStep";
-import { RemoveProviderStep } from "../components/init/RemoveProviderStep";
+import { ProviderTypeStep } from "../components/provider/ProviderTypeStep";
+import { ApiKeyStep } from "../components/provider/ApiKeyStep";
+import { ModelStep } from "../components/provider/ModelStep";
+import { RemoveProviderStep } from "../components/provider/RemoveProviderStep";
 import type { Provider, ProviderType } from "../types/config";
 
 type InitStage =

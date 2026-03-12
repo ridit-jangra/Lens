@@ -12,6 +12,7 @@ import { IssueFixer } from "./IssueFixer";
 import { writeLensFile } from "../../utils/lensfile";
 import type { Provider } from "../../types/config";
 import type { AnalysisResult, ImportantFile } from "../../types/repo";
+import { useThinkingPhrase } from "../../utils/thinking";
 
 type AnalysisStage =
   | { type: "picking-provider" }
@@ -55,6 +56,30 @@ ${
 ## Suggestions
 ${result.suggestions.map((s) => `- ${s}`).join("\n")}
 `;
+}
+
+function AskingFilesStep() {
+  const phrase = useThinkingPhrase(true, "model");
+  return (
+    <Box gap={1}>
+      <Text color={ACCENT}>
+        <Spinner />
+      </Text>
+      <Text color={ACCENT}>{phrase}</Text>
+    </Box>
+  );
+}
+
+function AnalyzingStep() {
+  const phrase = useThinkingPhrase(true, "summary");
+  return (
+    <Box gap={1}>
+      <Text color={ACCENT}>
+        <Spinner />
+      </Text>
+      <Text color={ACCENT}>{phrase}</Text>
+    </Box>
+  );
 }
 
 export const RepoAnalysis = ({
@@ -140,29 +165,13 @@ export const RepoAnalysis = ({
   }
 
   if (stage.type === "requesting-files") {
-    return (
-      <Box marginTop={1}>
-        <Text color={ACCENT}>
-          <Spinner />
-        </Text>
-        <Box marginLeft={1}>
-          <Text>Asking model which files to read...</Text>
-        </Box>
-      </Box>
-    );
+    return <AskingFilesStep />;
   }
 
   if (stage.type === "analyzing") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
-        <Box>
-          <Text color={ACCENT}>
-            <Spinner />
-          </Text>
-          <Box marginLeft={1}>
-            <Text>Analyzing repository...</Text>
-          </Box>
-        </Box>
+        <AnalyzingStep />
         {requestedFiles.length > 0 && (
           <Box flexDirection="column" marginLeft={2}>
             <Text color="gray">Reading {requestedFiles.length} files:</Text>
