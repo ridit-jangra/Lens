@@ -3,12 +3,7 @@ import { Box, Text } from "ink";
 import { ACCENT } from "../../colors";
 import type { Message } from "../../types/chat";
 
-// ── Inline markdown renderer ──────────────────────────────────────────────────
-// Renders a single line of text, handling `backtick` spans and **bold**.
-// Fixes the line-break bug by keeping everything inline.
-
 function InlineText({ text }: { text: string }) {
-  // Split on backtick spans and **bold** spans
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
   return (
     <>
@@ -37,16 +32,10 @@ function InlineText({ text }: { text: string }) {
   );
 }
 
-// ── Code block renderer ───────────────────────────────────────────────────────
-
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   return (
     <Box flexDirection="column" marginY={1} marginLeft={2}>
-      {lang && (
-        <Text color="gray" dimColor>
-          {lang}
-        </Text>
-      )}
+      {lang && <Text color="gray">{lang}</Text>}
       {code.split("\n").map((line, i) => (
         <Text key={i} color={ACCENT}>
           {"  "}
@@ -57,16 +46,12 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   );
 }
 
-// ── Message body renderer ─────────────────────────────────────────────────────
-
 function MessageBody({ content }: { content: string }) {
-  // Split into fenced code blocks and normal text
   const segments = content.split(/(```[\s\S]*?```)/g);
 
   return (
     <Box flexDirection="column">
       {segments.map((seg, si) => {
-        // Fenced code block
         if (seg.startsWith("```")) {
           const lines = seg.slice(3).split("\n");
           const lang = lines[0]?.trim() ?? "";
@@ -78,12 +63,10 @@ function MessageBody({ content }: { content: string }) {
           return <CodeBlock key={si} lang={lang} code={code} />;
         }
 
-        // Normal text — render line by line
         const lines = seg.split("\n").filter((l) => l.trim() !== "");
         return (
           <Box key={si} flexDirection="column">
             {lines.map((line, li) => {
-              // Bullet points
               if (line.match(/^[-*•]\s/)) {
                 return (
                   <Box key={li} gap={1}>
@@ -92,7 +75,7 @@ function MessageBody({ content }: { content: string }) {
                   </Box>
                 );
               }
-              // Numbered list
+
               if (line.match(/^\d+\.\s/)) {
                 const num = line.match(/^(\d+)\.\s/)![1];
                 return (
@@ -102,7 +85,7 @@ function MessageBody({ content }: { content: string }) {
                   </Box>
                 );
               }
-              // Normal line
+
               return (
                 <Box key={li}>
                   <InlineText text={line} />
@@ -116,10 +99,7 @@ function MessageBody({ content }: { content: string }) {
   );
 }
 
-// ── Static message ────────────────────────────────────────────────────────────
-
 export function StaticMessage({ msg }: { msg: Message }) {
-  // ── user message ──
   if (msg.role === "user") {
     return (
       <Box marginBottom={1} gap={1}>
@@ -131,7 +111,6 @@ export function StaticMessage({ msg }: { msg: Message }) {
     );
   }
 
-  // ── tool call ──
   if (msg.type === "tool") {
     const icons: Record<string, string> = {
       shell: "$",
@@ -159,7 +138,7 @@ export function StaticMessage({ msg }: { msg: Message }) {
         </Box>
         {msg.approved && msg.result && (
           <Box marginLeft={2}>
-            <Text color="gray" dimColor>
+            <Text color="gray">
               {msg.result.split("\n")[0]?.slice(0, 120)}
               {(msg.result.split("\n")[0]?.length ?? 0) > 120 ? "…" : ""}
             </Text>
@@ -169,7 +148,6 @@ export function StaticMessage({ msg }: { msg: Message }) {
     );
   }
 
-  // ── plan / changes ──
   if (msg.type === "plan") {
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -189,7 +167,6 @@ export function StaticMessage({ msg }: { msg: Message }) {
     );
   }
 
-  // ── assistant text ──
   return (
     <Box marginBottom={1} gap={1}>
       <Text color={ACCENT}>●</Text>

@@ -164,7 +164,7 @@ export const DiffViewer = ({
         );
       })}
       {allLines.length > maxVisible && (
-        <Text color="gray" dimColor>
+        <Text color="gray">
           {scrollOffset + maxVisible < allLines.length
             ? `↓ ${allLines.length - scrollOffset - maxVisible} more lines`
             : "end of diff"}

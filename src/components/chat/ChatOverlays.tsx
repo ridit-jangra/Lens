@@ -9,8 +9,6 @@ import { StaticMessage } from "./ChatMessage";
 import type { DiffLine, FilePatch } from "../repo/DiffViewer";
 import type { Message, ToolCall, ChatStage } from "../../types/chat";
 
-// ── Shared history ────────────────────────────────────────────────────────────
-
 function History({ committed }: { committed: Message[] }) {
   return (
     <Static items={committed}>
@@ -19,8 +17,6 @@ function History({ committed }: { committed: Message[] }) {
   );
 }
 
-// ── Shortcut hint ─────────────────────────────────────────────────────────────
-
 function Hint({ text }: { text: string }) {
   return (
     <Text color="gray" dimColor>
@@ -28,8 +24,6 @@ function Hint({ text }: { text: string }) {
     </Text>
   );
 }
-
-// ── Permission prompt ─────────────────────────────────────────────────────────
 
 export function PermissionPrompt({
   tool,
@@ -72,15 +66,11 @@ export function PermissionPrompt({
         <Text color="white">{value}</Text>
       </Box>
       <Box gap={1} marginLeft={2}>
-        <Text color="gray" dimColor>
-          y/enter allow · n/esc deny
-        </Text>
+        <Text color="gray">y/enter allow · n/esc deny</Text>
       </Box>
     </Box>
   );
 }
-
-// ── Input box (blinking cursor) ───────────────────────────────────────────────
 
 export function InputBox({
   value,
@@ -109,8 +99,6 @@ export function InputBox({
   );
 }
 
-// ── Typewriter text ───────────────────────────────────────────────────────────
-
 export function TypewriterText({
   text,
   color = ACCENT,
@@ -123,7 +111,6 @@ export function TypewriterText({
   const [displayed, setDisplayed] = React.useState("");
   const [target, setTarget] = React.useState(text);
 
-  // When text changes (new phrase) reset and retype
   React.useEffect(() => {
     setDisplayed("");
     setTarget(text);
@@ -141,8 +128,6 @@ export function TypewriterText({
   return <Text color={color}>{displayed}</Text>;
 }
 
-// ── Shortcut bar ──────────────────────────────────────────────────────────────
-
 export function ShortcutBar() {
   return (
     <Box gap={3} marginTop={0}>
@@ -152,8 +137,6 @@ export function ShortcutBar() {
     </Box>
   );
 }
-
-// ── Clone stages ──────────────────────────────────────────────────────────────
 
 export function CloneOfferView({
   stage,
@@ -269,8 +252,6 @@ export function CloneErrorView({
     </Box>
   );
 }
-
-// ── Preview and viewing-file ──────────────────────────────────────────────────
 
 export function PreviewView({
   stage,
