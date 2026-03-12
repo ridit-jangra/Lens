@@ -116,6 +116,11 @@ export function StaticMessage({ msg }: { msg: Message }) {
       shell: "$",
       fetch: "~>",
       "read-file": "r",
+      "read-folder": "d",
+      grep: "/",
+      "delete-file": "x",
+      "delete-folder": "X",
+      "open-url": "↗",
       "write-file": "w",
       search: "?",
     };

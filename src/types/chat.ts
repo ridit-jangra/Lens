@@ -6,7 +6,13 @@ export type ToolCall =
   | { type: "shell"; command: string }
   | { type: "fetch"; url: string }
   | { type: "read-file"; filePath: string }
+  | { type: "read-folder"; folderPath: string }
+  | { type: "grep"; pattern: string; glob: string }
   | { type: "write-file"; filePath: string; fileContent: string }
+  | { type: "delete-file"; filePath: string }
+  | { type: "delete-folder"; folderPath: string }
+  | { type: "open-url"; url: string }
+  | { type: "generate-pdf"; filePath: string; content: string }
   | { type: "search"; query: string };
 
 // ── Messages ──────────────────────────────────────────────────────────────────
@@ -16,7 +22,18 @@ export type Message =
   | {
       role: "assistant";
       type: "tool";
-      toolName: "shell" | "fetch" | "read-file" | "write-file" | "search";
+      toolName:
+        | "shell"
+        | "fetch"
+        | "read-file"
+        | "read-folder"
+        | "grep"
+        | "write-file"
+        | "delete-file"
+        | "delete-folder"
+        | "open-url"
+        | "generate-pdf"
+        | "search";
       content: string;
       result: string;
       approved: boolean;
