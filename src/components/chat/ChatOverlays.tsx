@@ -100,10 +100,12 @@ export function InputBox({
   value,
   onChange,
   onSubmit,
+  inputKey,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSubmit: (v: string) => void;
+  inputKey?: number;
 }) {
   return (
     <Box
@@ -117,7 +119,12 @@ export function InputBox({
     >
       <Box gap={1}>
         <Text color={ACCENT}>{">"}</Text>
-        <TextInput value={value} onChange={onChange} onSubmit={onSubmit} />
+        <TextInput
+          key={inputKey}
+          value={value}
+          onChange={onChange}
+          onSubmit={onSubmit}
+        />
       </Box>
     </Box>
   );

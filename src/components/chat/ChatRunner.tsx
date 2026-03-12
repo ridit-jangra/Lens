@@ -32,6 +32,13 @@ import {
   callChat,
   searchWeb,
 } from "../../utils/chat";
+import {
+  saveChat,
+  loadChat,
+  listChats,
+  deleteChat,
+  getChatNameSuggestions,
+} from "../../utils/chatHistory";
 import { StaticMessage } from "./ChatMessage";
 import {
   PermissionPrompt,
@@ -50,30 +57,60 @@ import { TimelineRunner } from "../timeline/TimelineRunner";
 import type { Provider } from "../../types/config";
 import type { Message, ChatStage } from "../../types/chat";
 import {
-  appendHistory,
-  buildHistorySummary,
-  clearRepoHistory,
-} from "../../utils/history";
+  appendMemory,
+  buildMemorySummary,
+  clearRepoMemory,
+  addMemory,
+  deleteMemory,
+  listMemories,
+} from "../../utils/memory";
 import { readLensFile } from "../../utils/lensfile";
 import { ReviewCommand } from "../../commands/review";
 
 const COMMANDS = [
   { cmd: "/timeline", desc: "browse commit history" },
   { cmd: "/clear history", desc: "wipe session memory for this repo" },
-  { cmd: "/review", desc: "review current codebsae" },
+  { cmd: "/review", desc: "review current codebase" },
   { cmd: "/auto", desc: "toggle auto-approve for read/search tools" },
+  { cmd: "/chat", desc: "chat history commands" },
+  { cmd: "/chat list", desc: "list saved chats for this repo" },
+  { cmd: "/chat load", desc: "load a saved chat by name" },
+  { cmd: "/chat rename", desc: "rename the current chat" },
+  { cmd: "/chat delete", desc: "delete a saved chat by name" },
+  { cmd: "/memory", desc: "memory commands" },
+  { cmd: "/memory list", desc: "list all memories for this repo" },
+  { cmd: "/memory add", desc: "add a memory" },
+  { cmd: "/memory delete", desc: "delete a memory by id" },
+  { cmd: "/memory clear", desc: "clear all memories for this repo" },
 ];
 
 function CommandPalette({
   query,
   onSelect,
+  recentChats,
 }: {
   query: string;
   onSelect: (cmd: string) => void;
+  recentChats: string[];
 }) {
   const q = query.toLowerCase();
+
+  // If typing "/chat load <something>", stay visible and filter chats
+  const isChatLoad = q.startsWith("/chat load") || q.startsWith("/chat delete");
+  const chatFilter = isChatLoad
+    ? q.startsWith("/chat load")
+      ? q.slice("/chat load".length).trim()
+      : q.slice("/chat delete".length).trim()
+    : "";
+  const filteredChats = chatFilter
+    ? recentChats.filter((n) => n.toLowerCase().includes(chatFilter))
+    : recentChats;
+
   const matches = COMMANDS.filter((c) => c.cmd.startsWith(q));
-  if (!matches.length) return null;
+
+  // Keep palette open if we're in /chat load mode even after space
+  if (!matches.length && !isChatLoad) return null;
+  if (!matches.length && isChatLoad && filteredChats.length === 0) return null;
 
   return (
     <Box flexDirection="column" marginBottom={1} marginLeft={2}>
@@ -90,6 +127,19 @@ function CommandPalette({
           </Box>
         );
       })}
+      {isChatLoad && filteredChats.length > 0 && (
+        <Box flexDirection="column" marginTop={matches.length ? 1 : 0}>
+          <Text color="gray" dimColor>
+            {chatFilter ? `matching "${chatFilter}":` : "recent chats:"}
+          </Text>
+          {filteredChats.map((name, i) => (
+            <Box key={i} gap={1} marginLeft={2}>
+              <Text color={ACCENT}>·</Text>
+              <Text color="white">{name}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -106,18 +156,36 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [showTimeline, setShowTimeline] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
+  const [chatName, setChatName] = useState<string | null>(null);
+  const chatNameRef = useRef<string | null>(null);
+  const [recentChats, setRecentChats] = useState<string[]>([]);
+  const inputHistoryRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const [inputKey, setInputKey] = useState(0);
 
-  // Abort controller for the currently in-flight API call.
-  // Pressing ESC while thinking aborts the request and drops the response.
+  const updateChatName = (name: string) => {
+    chatNameRef.current = name;
+    setChatName(name);
+  };
+
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Cache of tool results within a single conversation turn to prevent
-  // the model from re-calling tools it already ran with the same args
   const toolResultCache = useRef<Map<string, string>>(new Map());
-
   const inputBuffer = useRef("");
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const thinkingPhrase = useThinkingPhrase(stage.type === "thinking");
+
+  // Load recent chats on mount
+  React.useEffect(() => {
+    const chats = listChats(repoPath);
+    setRecentChats(chats.slice(0, 10).map((c) => c.name));
+  }, [repoPath]);
+
+  // Auto-save whenever messages change
+  React.useEffect(() => {
+    if (chatNameRef.current && allMessages.length > 1) {
+      saveChat(chatNameRef.current, repoPath, allMessages);
+    }
+  }, [allMessages]);
 
   const flushBuffer = () => {
     const buf = inputBuffer.current;
@@ -135,7 +203,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   };
 
   const handleError = (currentAll: Message[]) => (err: unknown) => {
-    // Silently drop aborted requests — user pressed ESC intentionally
     if (err instanceof Error && err.name === "AbortError") {
       setStage({ type: "idle" });
       return;
@@ -155,13 +222,33 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     currentAll: Message[],
     signal: AbortSignal,
   ) => {
-    // If ESC was pressed before we got here, silently drop the response
     if (signal.aborted) {
       setStage({ type: "idle" });
       return;
     }
 
-    const parsed = parseResponse(raw);
+    // Handle inline memory operations the model may emit
+    const memAddMatches = [
+      ...raw.matchAll(/<memory-add>([\s\S]*?)<\/memory-add>/g),
+    ];
+    const memDelMatches = [
+      ...raw.matchAll(/<memory-delete>([\s\S]*?)<\/memory-delete>/g),
+    ];
+    for (const match of memAddMatches) {
+      const content = match[1]!.trim();
+      if (content) addMemory(content, repoPath);
+    }
+    for (const match of memDelMatches) {
+      const id = match[1]!.trim();
+      if (id) deleteMemory(id, repoPath);
+    }
+    // Strip memory tags from raw before parsing
+    const cleanRaw = raw
+      .replace(/<memory-add>[\s\S]*?<\/memory-add>/g, "")
+      .replace(/<memory-delete>[\s\S]*?<\/memory-delete>/g, "")
+      .trim();
+
+    const parsed = parseResponse(cleanRaw);
 
     if (parsed.kind === "changes") {
       if (parsed.patches.length === 0) {
@@ -252,7 +339,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         setCommitted((prev) => [...prev, preambleMsg]);
       }
 
-      // Safe tools that can be auto-approved (no side effects)
       const isSafeTool =
         parsed.kind === "read-file" ||
         parsed.kind === "read-folder" ||
@@ -334,7 +420,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             "write-file": "file-written",
             search: "url-fetched",
           } as const;
-          appendHistory({
+          appendMemory({
             kind: kindMap[parsed.kind as keyof typeof kindMap] ?? "shell-run",
             detail:
               parsed.kind === "shell"
@@ -418,7 +504,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         setAllMessages(withTool);
         setCommitted((prev) => [...prev, toolMsg]);
 
-        // Create a fresh abort controller for the follow-up call
         const nextAbort = new AbortController();
         abortControllerRef.current = nextAbort;
 
@@ -514,7 +599,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     }
 
     if (text.trim().toLowerCase() === "/clear history") {
-      clearRepoHistory(repoPath);
+      clearRepoMemory(repoPath);
       const clearedMsg: Message = {
         role: "assistant",
         content: "History cleared for this repo.",
@@ -525,13 +610,258 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
+    // bare /chat — show usage
+    if (text.trim().toLowerCase() === "/chat") {
+      const msg: Message = {
+        role: "assistant",
+        content:
+          "Chat commands: `/chat list` · `/chat load <n>` · `/chat rename <n>` · `/chat delete <n>`",
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
+      return;
+    }
+
+    // /chat rename <newname>
+    if (text.trim().toLowerCase().startsWith("/chat rename")) {
+      const parts = text.trim().split(/\s+/);
+      const newName = parts.slice(2).join("-");
+      if (!newName) {
+        const msg: Message = {
+          role: "assistant",
+          content: "Usage: `/chat rename <new-name>`",
+          type: "text",
+        };
+        setCommitted((prev) => [...prev, msg]);
+        setAllMessages((prev) => [...prev, msg]);
+        return;
+      }
+      const oldName = chatNameRef.current;
+      if (oldName) deleteChat(oldName);
+      updateChatName(newName);
+      saveChat(newName, repoPath, allMessages);
+      setRecentChats((prev) =>
+        [newName, ...prev.filter((n) => n !== newName && n !== oldName)].slice(
+          0,
+          10,
+        ),
+      );
+      const msg: Message = {
+        role: "assistant",
+        content: `Chat renamed to **${newName}**.`,
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
+      return;
+    }
+
+    // /chat delete <name>
+    if (text.trim().toLowerCase().startsWith("/chat delete")) {
+      const parts = text.trim().split(/\s+/);
+      const name = parts.slice(2).join("-");
+      if (!name) {
+        const msg: Message = {
+          role: "assistant",
+          content: "Usage: `/chat delete <name>`",
+          type: "text",
+        };
+        setCommitted((prev) => [...prev, msg]);
+        setAllMessages((prev) => [...prev, msg]);
+        return;
+      }
+      const deleted = deleteChat(name);
+      if (!deleted) {
+        const msg: Message = {
+          role: "assistant",
+          content: `Chat **${name}** not found.`,
+          type: "text",
+        };
+        setCommitted((prev) => [...prev, msg]);
+        setAllMessages((prev) => [...prev, msg]);
+        return;
+      }
+      // If deleting the current chat, clear the name so it gets re-named on next message
+      if (chatNameRef.current === name) {
+        chatNameRef.current = null;
+        setChatName(null);
+      }
+      setRecentChats((prev) => prev.filter((n) => n !== name));
+      const msg: Message = {
+        role: "assistant",
+        content: `Chat **${name}** deleted.`,
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
+      return;
+    }
+
+    // /chat list
+    if (text.trim().toLowerCase() === "/chat list") {
+      const chats = listChats(repoPath);
+      const content =
+        chats.length === 0
+          ? "No saved chats for this repo yet."
+          : `Saved chats:\n\n${chats
+              .map(
+                (c) =>
+                  `- **${c.name}** · ${c.userMessageCount} messages · ${new Date(c.savedAt).toLocaleString()}`,
+              )
+              .join("\n")}`;
+      const msg: Message = { role: "assistant", content, type: "text" };
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
+      return;
+    }
+
+    // /chat load <n>
+    if (text.trim().toLowerCase().startsWith("/chat load")) {
+      const parts = text.trim().split(/\s+/);
+      const name = parts.slice(2).join("-");
+      if (!name) {
+        const chats = listChats(repoPath);
+        const content =
+          chats.length === 0
+            ? "No saved chats found."
+            : `Specify a chat name. Recent chats:\n\n${chats
+                .slice(0, 10)
+                .map((c) => `- **${c.name}**`)
+                .join("\n")}`;
+        const msg: Message = { role: "assistant", content, type: "text" };
+        setCommitted((prev) => [...prev, msg]);
+        setAllMessages((prev) => [...prev, msg]);
+        return;
+      }
+      const saved = loadChat(name);
+      if (!saved) {
+        const msg: Message = {
+          role: "assistant",
+          content: `Chat **${name}** not found. Use \`/chat list\` to see saved chats.`,
+          type: "text",
+        };
+        setCommitted((prev) => [...prev, msg]);
+        setAllMessages((prev) => [...prev, msg]);
+        return;
+      }
+      updateChatName(name);
+      setAllMessages(saved.messages);
+      setCommitted(saved.messages);
+      const notice: Message = {
+        role: "assistant",
+        content: `Loaded chat **${name}** · ${saved.userMessageCount} messages · saved ${new Date(saved.savedAt).toLocaleString()}`,
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, notice]);
+      setAllMessages((prev) => [...prev, notice]);
+      return;
+    }
+
+    // /memory list
+    if (
+      text.trim().toLowerCase() === "/memory list" ||
+      text.trim().toLowerCase() === "/memory"
+    ) {
+      const mems = listMemories(repoPath);
+      const content =
+        mems.length === 0
+          ? "No memories stored for this repo yet."
+          : `Memories for this repo:\n\n${mems.map((m) => `- [${m.id}] ${m.content}`).join("\n")}`;
+      const msg: Message = { role: "assistant", content, type: "text" };
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
+      return;
+    }
+
+    // /memory add <content>
+    if (text.trim().toLowerCase().startsWith("/memory add")) {
+      const content = text.trim().slice("/memory add".length).trim();
+      if (!content) {
+        const msg: Message = {
+          role: "assistant",
+          content: "Usage: `/memory add <content>`",
+          type: "text",
+        };
+        setCommitted((prev) => [...prev, msg]);
+        setAllMessages((prev) => [...prev, msg]);
+        return;
+      }
+      const mem = addMemory(content, repoPath);
+      const msg: Message = {
+        role: "assistant",
+        content: `Memory saved **[${mem.id}]**: ${mem.content}`,
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
+      return;
+    }
+
+    // /memory delete <id>
+    if (text.trim().toLowerCase().startsWith("/memory delete")) {
+      const id = text.trim().split(/\s+/)[2];
+      if (!id) {
+        const msg: Message = {
+          role: "assistant",
+          content: "Usage: `/memory delete <id>`",
+          type: "text",
+        };
+        setCommitted((prev) => [...prev, msg]);
+        setAllMessages((prev) => [...prev, msg]);
+        return;
+      }
+      const deleted = deleteMemory(id, repoPath);
+      const msg: Message = {
+        role: "assistant",
+        content: deleted
+          ? `Memory **[${id}]** deleted.`
+          : `Memory **[${id}]** not found.`,
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
+      return;
+    }
+
+    // /memory clear
+    if (text.trim().toLowerCase() === "/memory clear") {
+      clearRepoMemory(repoPath);
+      const msg: Message = {
+        role: "assistant",
+        content: "All memories cleared for this repo.",
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
+      return;
+    }
+
     const userMsg: Message = { role: "user", content: text, type: "text" };
     const nextAll = [...allMessages, userMsg];
     setCommitted((prev) => [...prev, userMsg]);
     setAllMessages(nextAll);
     toolResultCache.current.clear();
 
-    // Create a fresh abort controller for this request
+    // Track input history for up/down navigation
+    inputHistoryRef.current = [
+      text,
+      ...inputHistoryRef.current.filter((m) => m !== text),
+    ].slice(0, 50);
+    historyIndexRef.current = -1;
+
+    // Auto-name chat on first user message
+    if (!chatName) {
+      const name =
+        getChatNameSuggestions(nextAll)[0] ??
+        `chat-${new Date().toISOString().slice(0, 10)}`;
+      updateChatName(name);
+      setRecentChats((prev) =>
+        [name, ...prev.filter((n) => n !== name)].slice(0, 10),
+      );
+      saveChat(name, repoPath, nextAll);
+    }
+
     const abort = new AbortController();
     abortControllerRef.current = abort;
 
@@ -544,7 +874,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   useInput((input, key) => {
     if (showTimeline) return;
 
-    // ESC while thinking → abort the in-flight request and go idle
     if (stage.type === "thinking" && key.escape) {
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
@@ -555,6 +884,26 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     if (stage.type === "idle") {
       if (key.ctrl && input === "c") {
         process.exit(0);
+        return;
+      }
+
+      if (key.upArrow && inputHistoryRef.current.length > 0) {
+        const next = Math.min(
+          historyIndexRef.current + 1,
+          inputHistoryRef.current.length - 1,
+        );
+        historyIndexRef.current = next;
+        setInputValue(inputHistoryRef.current[next]!);
+        setInputKey((k) => k + 1);
+        return;
+      }
+
+      if (key.downArrow) {
+        const next = historyIndexRef.current - 1;
+        historyIndexRef.current = next;
+        const val = next < 0 ? "" : inputHistoryRef.current[next]!;
+        setInputValue(val);
+        setInputKey((k) => k + 1);
         return;
       }
 
@@ -582,7 +931,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
                 ?.replace(/\.git$/, "") ?? "repo";
             const destPath = path.join(os.tmpdir(), repoName);
             const fileCount = walkDir(destPath).length;
-            appendHistory({
+            appendMemory({
               kind: "url-fetched",
               detail: repoUrl,
               summary: `Cloned ${repoName} — ${fileCount} files`,
@@ -663,13 +1012,11 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       if (key.return || key.escape) {
         if (stage.type === "clone-done") {
           const repoName = stage.repoUrl.split("/").pop() ?? "repo";
-
           const summaryMsg: Message = {
             role: "assistant",
             type: "text",
             content: `Cloned **${repoName}** (${stage.fileCount} files) to \`${stage.destPath}\`.\n\nAsk me anything about it — I can read files, explain how it works, or suggest improvements.`,
           };
-
           const contextMsg: Message = {
             role: "assistant",
             type: "tool",
@@ -720,7 +1067,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
           const msg = allMessages[pendingMsgIndex];
           if (msg?.type === "plan") {
             setCommitted((prev) => [...prev, { ...msg, applied: false }]);
-            appendHistory({
+            appendMemory({
               kind: "code-skipped",
               detail: msg.patches
                 .map((p: { path: string }) => p.path)
@@ -737,7 +1084,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       if (key.return || input === "a" || input === "A") {
         try {
           applyPatches(repoPath, stage.patches);
-          appendHistory({
+          appendMemory({
             kind: "code-applied",
             detail: stage.patches.map((p) => p.path).join(", "),
             summary: `Applied changes to ${stage.patches.length} file(s)`,
@@ -788,7 +1135,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       .catch(() => walkDir(repoPath))
       .then((fileTree) => {
         const importantFiles = readImportantFiles(repoPath, fileTree);
-        const historySummary = buildHistorySummary(repoPath);
+        const historySummary = buildMemorySummary(repoPath);
         const lensFile = readLensFile(repoPath);
         const lensContext = lensFile
           ? `
@@ -892,18 +1239,21 @@ Suggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
           {inputValue.startsWith("/") && (
             <CommandPalette
               query={inputValue}
-              onSelect={(cmd) => {
-                setInputValue(cmd);
-              }}
+              onSelect={(cmd) => setInputValue(cmd)}
+              recentChats={recentChats}
             />
           )}
           <InputBox
             value={inputValue}
-            onChange={setInputValue}
+            onChange={(v) => {
+              historyIndexRef.current = -1;
+              setInputValue(v);
+            }}
             onSubmit={(val) => {
               if (val.trim()) sendMessage(val.trim());
               setInputValue("");
             }}
+            inputKey={inputKey}
           />
           <ShortcutBar autoApprove={autoApprove} />
         </Box>

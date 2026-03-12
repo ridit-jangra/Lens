@@ -98,6 +98,20 @@ function MessageBody({ content }: { content: string }) {
   );
 }
 
+function summarizeToolContent(toolName: string, content: string): string {
+  // For write-file, extract just the path
+  if (toolName === "write-file" || toolName === "read-file") {
+    const pathMatch = content.match(/"path"\s*:\s*"([^"]+)"/);
+    if (pathMatch) return pathMatch[1]!;
+  }
+  // For changes blocks, just say what changed
+  if (content.includes('"summary"')) {
+    const summaryMatch = content.match(/"summary"\s*:\s*"([^"]+)"/);
+    if (summaryMatch) return summaryMatch[1]!;
+  }
+  return content.length > 120 ? content.slice(0, 120) + "…" : content;
+}
+
 export function StaticMessage({ msg }: { msg: Message }) {
   if (msg.role === "user") {
     return (
@@ -130,7 +144,7 @@ export function StaticMessage({ msg }: { msg: Message }) {
         ? msg.content
         : msg.toolName === "search"
           ? `"${msg.content}"`
-          : msg.content;
+          : summarizeToolContent(msg.toolName, msg.content);
 
     return (
       <Box flexDirection="column" marginBottom={1}>
