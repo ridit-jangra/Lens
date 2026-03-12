@@ -71,6 +71,7 @@ export function readImportantFiles(
   repoPath: string,
   files: string[],
 ): ImportantFile[] {
+  if (files.length > 100) return [];
   return files.filter(isImportantFile).flatMap((filePath) => {
     try {
       const content = readFileSync(path.join(repoPath, filePath), "utf-8");
