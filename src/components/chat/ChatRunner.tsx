@@ -40,6 +40,7 @@ import {
   PreviewView,
   ViewingFileView,
 } from "./ChatOverlays";
+import { TimelineRunner } from "../timeline/TimelineRunner";
 import type { Provider } from "../../types/config";
 import type { Message, ChatStage } from "../../types/chat";
 import {
@@ -48,6 +49,43 @@ import {
   clearRepoHistory,
 } from "../../utils/history";
 import { readLensFile } from "../../utils/lensfile";
+import { ReviewCommand } from "../../commands/review";
+
+const COMMANDS = [
+  { cmd: "/timeline", desc: "browse commit history" },
+  { cmd: "/clear history", desc: "wipe session memory for this repo" },
+  { cmd: "/review", desc: "review current codebsae" },
+];
+
+function CommandPalette({
+  query,
+  onSelect,
+}: {
+  query: string;
+  onSelect: (cmd: string) => void;
+}) {
+  const q = query.toLowerCase();
+  const matches = COMMANDS.filter((c) => c.cmd.startsWith(q));
+  if (!matches.length) return null;
+
+  return (
+    <Box flexDirection="column" marginBottom={1} marginLeft={2}>
+      {matches.map((c, i) => {
+        const isExact = c.cmd === query;
+        return (
+          <Box key={i} gap={2}>
+            <Text color={isExact ? ACCENT : "white"} bold={isExact}>
+              {c.cmd}
+            </Text>
+            <Text color="gray" dimColor>
+              {c.desc}
+            </Text>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
 
 export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [stage, setStage] = useState<ChatStage>({ type: "picking-provider" });
@@ -58,6 +96,8 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [pendingMsgIndex, setPendingMsgIndex] = useState<number | null>(null);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [clonedUrls, setClonedUrls] = useState<Set<string>>(new Set());
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [showReview, setShowReview] = useState(false);
 
   const inputBuffer = useRef("");
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -299,6 +339,16 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const sendMessage = (text: string) => {
     if (!provider) return;
 
+    if (text.trim().toLowerCase() === "/timeline") {
+      setShowTimeline(true);
+      return;
+    }
+
+    if (text.trim().toLowerCase() === "/review") {
+      setShowReview(true);
+      return;
+    }
+
     if (text.trim().toLowerCase() === "/clear history") {
       clearRepoHistory(repoPath);
       const clearedMsg: Message = {
@@ -322,12 +372,20 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   };
 
   useInput((input, key) => {
+    if (showTimeline) return;
+
     if (stage.type === "idle") {
       if (key.ctrl && input === "c") {
         process.exit(0);
         return;
       }
 
+      if (key.tab && inputValue.startsWith("/")) {
+        const q = inputValue.toLowerCase();
+        const match = COMMANDS.find((c) => c.cmd.startsWith(q));
+        if (match) setInputValue(match.cmd);
+        return;
+      }
       return;
     }
 
@@ -574,9 +632,7 @@ Suggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
           : "";
         const greeting: Message = {
           role: "assistant",
-          content: `Welcome to Lens 
-Codebase loaded — ${importantFiles.length} files indexed.${historyNote}${lensGreetNote}
-Ask me anything, tell me what to build, share a URL, or ask me to read/write files.`,
+          content: `Welcome to Lens \nCodebase loaded — ${importantFiles.length} files indexed.${historyNote}${lensGreetNote}\nAsk me anything, tell me what to build, share a URL, or ask me to read/write files.\n\nTip: type /timeline to browse commit history.`,
           type: "text",
         };
         setCommitted([greeting]);
@@ -602,6 +658,22 @@ Ask me anything, tell me what to build, share a URL, or ask me to read/write fil
       </Box>
     );
   }
+
+  if (showTimeline) {
+    return (
+      <TimelineRunner
+        repoPath={repoPath}
+        onExit={() => setShowTimeline(false)}
+      />
+    );
+  }
+
+  if (showReview) {
+    return (
+      <ReviewCommand path={repoPath} onExit={() => setShowReview(false)} />
+    );
+  }
+
   if (stage.type === "clone-offer")
     return <CloneOfferView stage={stage} committed={committed} />;
   if (stage.type === "cloning")
@@ -636,6 +708,14 @@ Ask me anything, tell me what to build, share a URL, or ask me to read/write fil
 
       {stage.type === "idle" && (
         <Box flexDirection="column">
+          {inputValue.startsWith("/") && (
+            <CommandPalette
+              query={inputValue}
+              onSelect={(cmd) => {
+                setInputValue(cmd);
+              }}
+            />
+          )}
           <InputBox
             value={inputValue}
             onChange={setInputValue}
