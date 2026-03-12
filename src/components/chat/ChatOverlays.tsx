@@ -1,126 +1,15 @@
 import React from "react";
 import { Box, Text, Static } from "ink";
 import Spinner from "ink-spinner";
+import TextInput from "ink-text-input";
 import figures from "figures";
-import { ORANGE } from "../../colors";
+import { ACCENT } from "../../colors";
 import { DiffViewer } from "../repo/DiffViewer";
 import { StaticMessage } from "./ChatMessage";
 import type { DiffLine, FilePatch } from "../repo/DiffViewer";
 import type { Message, ToolCall, ChatStage } from "../../types/chat";
 
-function Key({ k }: { k: string }) {
-  return (
-    <Box borderStyle="single" borderColor="gray" paddingX={0}>
-      <Text color="white">{k}</Text>
-    </Box>
-  );
-}
-
-function Shortcut({ keys, label }: { keys: string[]; label: string }) {
-  return (
-    <Box gap={1} alignItems="center">
-      {keys.map((k, i) => (
-        <Key key={i} k={k} />
-      ))}
-      <Text color="gray" dimColor>
-        {label}
-      </Text>
-    </Box>
-  );
-}
-
-export function PermissionPrompt({
-  tool,
-  onDecide,
-}: {
-  tool: ToolCall;
-  onDecide: (approved: boolean) => void;
-}) {
-  const isShell = tool.type === "shell";
-  const isFetch = tool.type === "fetch";
-  const isReadFile = tool.type === "read-file";
-  const isWriteFile = tool.type === "write-file";
-
-  let icon = figures.warning;
-  let label = "Unknown tool";
-  let value = "";
-  let valueColor: "red" | "cyan" | "blue" | "green" = "cyan";
-
-  if (isShell) {
-    icon = "$";
-    label = "Run command";
-    value = (tool as { type: "shell"; command: string }).command;
-    valueColor = "red";
-  } else if (isFetch) {
-    icon = "↗";
-    label = "Fetch URL";
-    value = (tool as { type: "fetch"; url: string }).url;
-    valueColor = "cyan";
-  } else if (isReadFile) {
-    icon = "📄";
-    label = "Read file";
-    value = (tool as { type: "read-file"; filePath: string }).filePath;
-    valueColor = "blue";
-  } else if (isWriteFile) {
-    const wf = tool as {
-      type: "write-file";
-      filePath: string;
-      fileContent: string;
-    };
-    icon = "✎";
-    label = "Write file";
-    value = `${wf.filePath} (${wf.fileContent.length} bytes)`;
-    valueColor = "green";
-  }
-
-  return (
-    <Box
-      flexDirection="column"
-      gap={1}
-      borderStyle="round"
-      borderColor="yellow"
-      paddingX={1}
-      marginY={1}
-    >
-      <Box gap={1}>
-        <Text bold color="yellow">
-          {icon}
-        </Text>
-        <Text bold color="yellow">
-          {label}
-        </Text>
-      </Box>
-      <Text color={valueColor}>{value}</Text>
-      <Box gap={3}>
-        <Shortcut keys={["Y", "↵"]} label="allow" />
-        <Shortcut keys={["N", "Esc"]} label="deny" />
-      </Box>
-    </Box>
-  );
-}
-
-export function InputBox({ value }: { value: string }) {
-  return (
-    <Box gap={1} borderStyle="round" borderColor="gray" paddingX={1}>
-      <Text color="green" bold>
-        {figures.triangleRight}
-      </Text>
-      <Text color="white">{value}</Text>
-      <Text color="green">▋</Text>
-    </Box>
-  );
-}
-
-export function ShortcutBar() {
-  return (
-    <Box gap={3} marginTop={0}>
-      <Shortcut keys={["↵"]} label="send" />
-      <Shortcut keys={["^V"]} label="paste" />
-      <Shortcut keys={["^C"]} label="exit" />
-      <Shortcut keys={["⌫"]} label="delete" />
-    </Box>
-  );
-}
+// ── Shared history ────────────────────────────────────────────────────────────
 
 function History({ committed }: { committed: Message[] }) {
   return (
@@ -130,6 +19,142 @@ function History({ committed }: { committed: Message[] }) {
   );
 }
 
+// ── Shortcut hint ─────────────────────────────────────────────────────────────
+
+function Hint({ text }: { text: string }) {
+  return (
+    <Text color="gray" dimColor>
+      {text}
+    </Text>
+  );
+}
+
+// ── Permission prompt ─────────────────────────────────────────────────────────
+
+export function PermissionPrompt({
+  tool,
+  onDecide,
+}: {
+  tool: ToolCall;
+  onDecide: (approved: boolean) => void;
+}) {
+  let icon: string;
+  let label: string;
+  let value: string;
+
+  if (tool.type === "shell") {
+    icon = "$";
+    label = "run";
+    value = tool.command;
+  } else if (tool.type === "fetch") {
+    icon = "~>";
+    label = "fetch";
+    value = tool.url;
+  } else if (tool.type === "read-file") {
+    icon = "r";
+    label = "read";
+    value = tool.filePath;
+  } else if (tool.type === "write-file") {
+    icon = "w";
+    label = "write";
+    value = `${tool.filePath} (${tool.fileContent.length} bytes)`;
+  } else {
+    icon = "?";
+    label = "search";
+    value = tool.query;
+  }
+
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Box gap={1}>
+        <Text color={ACCENT}>{icon}</Text>
+        <Text color="gray">{label}</Text>
+        <Text color="white">{value}</Text>
+      </Box>
+      <Box gap={1} marginLeft={2}>
+        <Text color="gray" dimColor>
+          y/enter allow · n/esc deny
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Input box (blinking cursor) ───────────────────────────────────────────────
+
+export function InputBox({
+  value,
+  onChange,
+  onSubmit,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: (v: string) => void;
+}) {
+  return (
+    <Box
+      marginTop={1}
+      borderBottom
+      borderTop
+      borderRight={false}
+      borderLeft={false}
+      borderColor={"gray"}
+      borderStyle="single"
+    >
+      <Box gap={1}>
+        <Text color={ACCENT}>{">"}</Text>
+        <TextInput value={value} onChange={onChange} onSubmit={onSubmit} />
+      </Box>
+    </Box>
+  );
+}
+
+// ── Typewriter text ───────────────────────────────────────────────────────────
+
+export function TypewriterText({
+  text,
+  color = ACCENT,
+  speed = 38,
+}: {
+  text: string;
+  color?: string;
+  speed?: number;
+}) {
+  const [displayed, setDisplayed] = React.useState("");
+  const [target, setTarget] = React.useState(text);
+
+  // When text changes (new phrase) reset and retype
+  React.useEffect(() => {
+    setDisplayed("");
+    setTarget(text);
+  }, [text]);
+
+  React.useEffect(() => {
+    if (displayed.length >= target.length) return;
+    const t = setTimeout(
+      () => setDisplayed(target.slice(0, displayed.length + 1)),
+      speed,
+    );
+    return () => clearTimeout(t);
+  }, [displayed, target, speed]);
+
+  return <Text color={color}>{displayed}</Text>;
+}
+
+// ── Shortcut bar ──────────────────────────────────────────────────────────────
+
+export function ShortcutBar() {
+  return (
+    <Box gap={3} marginTop={0}>
+      <Text color="gray" dimColor>
+        enter send · ^v paste · ^c exit
+      </Text>
+    </Box>
+  );
+}
+
+// ── Clone stages ──────────────────────────────────────────────────────────────
+
 export function CloneOfferView({
   stage,
   committed,
@@ -138,29 +163,16 @@ export function CloneOfferView({
   committed: Message[];
 }) {
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column">
       <History committed={committed} />
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor="cyan"
-        paddingX={1}
-        gap={0}
-      >
-        <Text bold color="cyan">
-          {figures.info} Want to go deeper?
-        </Text>
-        <Text color="white">
-          Clone{" "}
-          <Text color="cyan" bold>
-            {stage.repoUrl}
-          </Text>{" "}
-          and analyze it?
-        </Text>
-        <Box gap={3} marginTop={1}>
-          <Shortcut keys={["Y", "↵"]} label="clone" />
-          <Shortcut keys={["N", "Esc"]} label="skip" />
+      <Box flexDirection="column" marginY={1}>
+        <Box gap={1}>
+          <Text color={ACCENT}>*</Text>
+          <Text color="white">clone </Text>
+          <Text color={ACCENT}>{stage.repoUrl}</Text>
+          <Text color="white">?</Text>
         </Box>
+        <Hint text="  y/enter clone · n/esc skip" />
       </Box>
     </Box>
   );
@@ -174,19 +186,15 @@ export function CloningView({
   committed: Message[];
 }) {
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column">
       <History committed={committed} />
-      <Box gap={1}>
-        <Text color={ORANGE}>
+      <Box gap={1} marginTop={1}>
+        <Text color={ACCENT}>
           <Spinner />
         </Text>
-        <Text>
-          Cloning{" "}
-          <Text color="cyan" bold>
-            {stage.repoUrl}
-          </Text>
-          …
-        </Text>
+        <Text color="gray">cloning </Text>
+        <Text color={ACCENT}>{stage.repoUrl}</Text>
+        <Text color="gray">...</Text>
       </Box>
     </Box>
   );
@@ -200,23 +208,15 @@ export function CloneExistsView({
   committed: Message[];
 }) {
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column">
       <History committed={committed} />
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor="yellow"
-        paddingX={1}
-        gap={0}
-      >
-        <Text bold color="yellow">
-          {figures.warning} Already cloned
-        </Text>
-        <Text color="white">{stage.repoPath}</Text>
-        <Box gap={3} marginTop={1}>
-          <Shortcut keys={["Y"]} label="re-clone" />
-          <Shortcut keys={["N"]} label="use existing" />
+      <Box flexDirection="column" marginY={1}>
+        <Box gap={1}>
+          <Text color="yellow">!</Text>
+          <Text color="gray">already cloned at </Text>
+          <Text color="white">{stage.repoPath}</Text>
         </Box>
+        <Hint text="  y re-clone · n use existing" />
       </Box>
     </Box>
   );
@@ -231,35 +231,19 @@ export function CloneDoneView({
 }) {
   const repoName = stage.repoUrl.split("/").pop() ?? "repo";
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column">
       <History committed={committed} />
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor="green"
-        paddingX={1}
-        gap={0}
-      >
-        <Text bold color="green">
-          {figures.tick} Cloned successfully
-        </Text>
-        <Box gap={2}>
-          <Text color="gray">repo </Text>
+      <Box flexDirection="column" marginY={1}>
+        <Box gap={1}>
+          <Text color="green">✓</Text>
           <Text color="white" bold>
             {repoName}
           </Text>
+          <Text color="gray">
+            cloned · {stage.fileCount} files · {stage.destPath}
+          </Text>
         </Box>
-        <Box gap={2}>
-          <Text color="gray">path </Text>
-          <Text color="white">{stage.destPath}</Text>
-        </Box>
-        <Box gap={2}>
-          <Text color="gray">files</Text>
-          <Text color="white">{stage.fileCount} files indexed</Text>
-        </Box>
-      </Box>
-      <Box gap={3}>
-        <Shortcut keys={["↵", "Esc"]} label="continue" />
+        <Hint text="  enter/esc continue" />
       </Box>
     </Box>
   );
@@ -273,26 +257,20 @@ export function CloneErrorView({
   committed: Message[];
 }) {
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column">
       <History committed={committed} />
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor="red"
-        paddingX={1}
-        gap={0}
-      >
-        <Text bold color="red">
-          {figures.cross} Clone failed
-        </Text>
-        <Text color="white">{stage.message}</Text>
-      </Box>
-      <Box gap={3}>
-        <Shortcut keys={["↵", "Esc"]} label="continue" />
+      <Box flexDirection="column" marginY={1}>
+        <Box gap={1}>
+          <Text color="red">✗</Text>
+          <Text color="red">{stage.message}</Text>
+        </Box>
+        <Hint text="  enter/esc continue" />
       </Box>
     </Box>
   );
 }
+
+// ── Preview and viewing-file ──────────────────────────────────────────────────
 
 export function PreviewView({
   stage,
@@ -303,20 +281,18 @@ export function PreviewView({
 }) {
   const { patches, diffLines, scrollOffset } = stage;
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column">
       <History committed={committed} />
-      <Box gap={1}>
-        <Text bold color="cyan">
-          {figures.info}
+      <Box gap={1} marginTop={1}>
+        <Text color={ACCENT}>*</Text>
+        <Text color="white" bold>
+          proposed changes
         </Text>
-        <Text bold color="cyan">
-          Proposed Changes
-        </Text>
-        <Text color="gray" dimColor>
+        <Text color="gray">
           ({patches.length} file{patches.length !== 1 ? "s" : ""})
         </Text>
       </Box>
-      <Box flexDirection="column" marginLeft={2}>
+      <Box flexDirection="column" marginLeft={2} marginTop={1}>
         {patches.map((p) => (
           <Box key={p.path} gap={1}>
             <Text color={p.isNew ? "green" : "yellow"}>
@@ -325,7 +301,7 @@ export function PreviewView({
             <Text color={p.isNew ? "green" : "yellow"}>{p.path}</Text>
             {p.isNew && (
               <Text color="gray" dimColor>
-                (new file)
+                new
               </Text>
             )}
           </Box>
@@ -336,11 +312,7 @@ export function PreviewView({
         diffs={diffLines}
         scrollOffset={scrollOffset}
       />
-      <Box gap={3}>
-        <Shortcut keys={["↑", "↓"]} label="scroll" />
-        <Shortcut keys={["↵", "A"]} label="apply" />
-        <Shortcut keys={["S", "Esc"]} label="skip" />
-      </Box>
+      <Hint text="↑↓ scroll · enter/a apply · s/esc skip" />
     </Box>
   );
 }
@@ -354,14 +326,15 @@ export function ViewingFileView({
 }) {
   const { file, diffLines, scrollOffset } = stage;
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column">
       <History committed={committed} />
-      <Box gap={1}>
-        <Text bold color="cyan">
+      <Box gap={1} marginTop={1}>
+        <Text color={ACCENT}>r</Text>
+        <Text color="white" bold>
           {file.path}
         </Text>
         <Text color="gray" dimColor>
-          {file.isNew ? "(new file)" : "(modified)"}
+          {file.isNew ? "new" : "modified"}
         </Text>
       </Box>
       <DiffViewer
@@ -369,10 +342,7 @@ export function ViewingFileView({
         diffs={[diffLines]}
         scrollOffset={scrollOffset}
       />
-      <Box gap={3}>
-        <Shortcut keys={["↑", "↓"]} label="scroll" />
-        <Shortcut keys={["↵", "Esc"]} label="back" />
-      </Box>
+      <Hint text="↑↓ scroll · enter/esc back" />
     </Box>
   );
 }

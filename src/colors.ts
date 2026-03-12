@@ -1,1 +1,1 @@
-export const ORANGE = "#FFA500";
+export const ACCENT = "#DA7758";

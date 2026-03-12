@@ -5,7 +5,7 @@ import figures from "figures";
 import { useState } from "react";
 import { writeFileSync, existsSync, mkdirSync } from "fs";
 import path from "path";
-import { ORANGE } from "../../colors";
+import { ACCENT } from "../../colors";
 import { callModelRaw } from "../../utils/ai";
 import { DiffViewer, buildDiffs } from "./DiffViewer";
 import type { DiffLine, FilePatch } from "./DiffViewer";
@@ -473,7 +473,7 @@ export const IssueFixer = ({
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
         <Box>
-          <Text color={ORANGE}>
+          <Text color={ACCENT}>
             <Spinner />
           </Text>
           <Box marginLeft={1}>
@@ -525,7 +525,7 @@ export const IssueFixer = ({
   if (stage.type === "applying") {
     return (
       <Box marginTop={1}>
-        <Text color={ORANGE}>
+        <Text color={ACCENT}>
           <Spinner />
         </Text>
         <Box marginLeft={1}>

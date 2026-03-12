@@ -4,7 +4,7 @@ import Spinner from "ink-spinner";
 import { useState, useRef } from "react";
 import path from "path";
 import os from "os";
-import { ORANGE } from "../../colors";
+import { ACCENT } from "../../colors";
 import { buildDiffs } from "../repo/DiffViewer";
 import { ProviderPicker } from "../repo/ProviderPicker";
 import { fetchFileTree, readImportantFiles } from "../../utils/files";
@@ -16,6 +16,7 @@ import {
   applyPatches,
   extractGithubUrl,
   toCloneUrl,
+  parseCloneTag,
   runShell,
   fetchUrl,
   readFile,
@@ -23,12 +24,14 @@ import {
   buildSystemPrompt,
   parseResponse,
   callChat,
+  searchWeb,
 } from "../../utils/chat";
 import { StaticMessage } from "./ChatMessage";
 import {
   PermissionPrompt,
   InputBox,
   ShortcutBar,
+  TypewriterText,
   CloneOfferView,
   CloningView,
   CloneExistsView,
@@ -44,6 +47,7 @@ import {
   buildHistorySummary,
   clearRepoHistory,
 } from "../../utils/history";
+import { readLensFile } from "../../utils/lensfile";
 
 export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [stage, setStage] = useState<ChatStage>({ type: "picking-provider" });
@@ -53,12 +57,13 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [inputValue, setInputValue] = useState("");
   const [pendingMsgIndex, setPendingMsgIndex] = useState<number | null>(null);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
+  const [clonedUrls, setClonedUrls] = useState<Set<string>>(new Set());
 
   const inputBuffer = useRef("");
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const thinkingPhrase = useThinkingPhrase(stage.type === "thinking");
 
-  //
+  // ── Input buffering ─────────────────────────────────────────────────────────
 
   const flushBuffer = () => {
     const buf = inputBuffer.current;
@@ -75,7 +80,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     }, 16);
   };
 
-  //
+  // ── Response handling ───────────────────────────────────────────────────────
 
   const handleError = (currentAll: Message[]) => (err: unknown) => {
     const errMsg: Message = {
@@ -91,7 +96,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const processResponse = (raw: string, currentAll: Message[]) => {
     const parsed = parseResponse(raw);
 
-    //
+    // ── code changes ──────────────────────────────────────────────
     if (parsed.kind === "changes") {
       if (parsed.patches.length === 0) {
         const msg: Message = {
@@ -120,16 +125,18 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         patches: parsed.patches,
         diffLines,
         scrollOffset: 0,
+        pendingMessages: currentAll,
       });
       return;
     }
 
-    //
+    // ── tool calls ────────────────────────────────────────────────
     if (
       parsed.kind === "shell" ||
       parsed.kind === "fetch" ||
       parsed.kind === "read-file" ||
-      parsed.kind === "write-file"
+      parsed.kind === "write-file" ||
+      parsed.kind === "search"
     ) {
       let tool: Parameters<typeof PermissionPrompt>[0]["tool"];
       if (parsed.kind === "shell") {
@@ -138,6 +145,8 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         tool = { type: "fetch", url: parsed.url };
       } else if (parsed.kind === "read-file") {
         tool = { type: "read-file", filePath: parsed.filePath };
+      } else if (parsed.kind === "search") {
+        tool = { type: "search", query: parsed.query };
       } else {
         tool = {
           type: "write-file",
@@ -177,18 +186,22 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
                   parsed.fileContent,
                   repoPath,
                 );
+              } else if (parsed.kind === "search") {
+                result = await searchWeb(parsed.query);
               }
             } catch (err: unknown) {
               result = `Error: ${err instanceof Error ? err.message : "failed"}`;
             }
           }
 
+          // Record to persistent history
           if (approved && !result.startsWith("Error:")) {
             const kindMap = {
               shell: "shell-run",
               fetch: "url-fetched",
               "read-file": "file-read",
               "write-file": "file-written",
+              search: "url-fetched",
             } as const;
             appendHistory({
               kind: kindMap[parsed.kind as keyof typeof kindMap] ?? "shell-run",
@@ -197,7 +210,9 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
                   ? parsed.command
                   : parsed.kind === "fetch"
                     ? parsed.url
-                    : parsed.filePath,
+                    : parsed.kind === "search"
+                      ? parsed.query
+                      : parsed.filePath,
               summary: result.split("\n")[0]?.slice(0, 120) ?? "",
               repoPath,
             });
@@ -210,15 +225,17 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
                 ? "fetch"
                 : parsed.kind === "read-file"
                   ? "read-file"
-                  : "write-file";
+                  : parsed.kind === "search"
+                    ? "search"
+                    : "write-file";
 
           const toolContent =
             parsed.kind === "shell"
               ? parsed.command
               : parsed.kind === "fetch"
                 ? parsed.url
-                : parsed.kind === "read-file"
-                  ? parsed.filePath
+                : parsed.kind === "search"
+                  ? parsed.query
                   : parsed.filePath;
 
           const toolMsg: Message = {
@@ -243,7 +260,26 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    //
+    // ── clone tag ─────────────────────────────────────────────────
+    if (parsed.kind === "clone") {
+      if (parsed.content) {
+        const preambleMsg: Message = {
+          role: "assistant",
+          content: parsed.content,
+          type: "text",
+        };
+        setAllMessages([...currentAll, preambleMsg]);
+        setCommitted((prev) => [...prev, preambleMsg]);
+      }
+      setStage({
+        type: "clone-offer",
+        repoUrl: parsed.repoUrl,
+        launchAnalysis: true,
+      });
+      return;
+    }
+
+    // ── plain text ────────────────────────────────────────────────
     const msg: Message = {
       role: "assistant",
       content: parsed.content,
@@ -253,20 +289,18 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     setAllMessages(withMsg);
     setCommitted((prev) => [...prev, msg]);
 
-    const recentUserText = currentAll
-      .filter((m) => m.role === "user")
-      .slice(-3)
-      .map((m) => m.content)
-      .join(" ");
-    const githubUrl = extractGithubUrl(recentUserText);
+    // Only check the single most-recent user message to avoid the model's
+    // own responses (which mention the URL) re-triggering the clone offer.
+    const lastUserMsg = [...currentAll]
+      .reverse()
+      .find((m) => m.role === "user");
+    const githubUrl = lastUserMsg
+      ? extractGithubUrl(lastUserMsg.content)
+      : null;
 
-    if (githubUrl) {
+    if (githubUrl && !clonedUrls.has(githubUrl)) {
       setTimeout(() => {
-        setStage({
-          type: "clone-offer",
-          repoUrl: githubUrl,
-          cloneUrl: toCloneUrl(githubUrl),
-        });
+        setStage({ type: "clone-offer", repoUrl: githubUrl });
       }, 80);
     } else {
       setStage({ type: "idle" });
@@ -298,61 +332,33 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       .catch(handleError(nextAll));
   };
 
-  //
+  // ── Input handler ───────────────────────────────────────────────────────────
 
   useInput((input, key) => {
-    //
+    // ── idle ───────────────────────────────────────────────────────
     if (stage.type === "idle") {
       if (key.ctrl && input === "c") {
         process.exit(0);
         return;
       }
 
-      if (key.ctrl && (input === "v" || input === "V")) {
-        flushBuffer();
-        const clip = readClipboard();
-        if (clip) setInputValue((v) => v + clip);
-        return;
-      }
+      // if (key.ctrl && (input === "v" || input === "V")) {
+      //   flushBuffer();
+      //   const clip = readClipboard();
+      //   if (clip) setInputValue((v) => v + clip);
+      //   return;
+      // }
 
-      if (key.return) {
-        flushBuffer();
-        const pending = inputBuffer.current;
-        inputBuffer.current = "";
-        if (flushTimer.current) {
-          clearTimeout(flushTimer.current);
-          flushTimer.current = null;
-        }
-        setInputValue((v) => {
-          const full = (v + pending).trim();
-          if (full) setTimeout(() => sendMessage(full), 0);
-          return "";
-        });
-        return;
-      }
-
-      if (key.backspace || key.delete) {
-        flushBuffer();
-        if (flushTimer.current) {
-          clearTimeout(flushTimer.current);
-          flushTimer.current = null;
-        }
-        setTimeout(() => setInputValue((v) => v.slice(0, -1)), 0);
-        return;
-      }
-
-      if (input && !key.ctrl && !key.meta) {
-        inputBuffer.current += input;
-        scheduleFlush();
-      }
       return;
     }
 
-    //
+    // ── clone-offer ────────────────────────────────────────────────
     if (stage.type === "clone-offer") {
       if (input === "y" || input === "Y" || key.return) {
-        const { repoUrl, cloneUrl } = stage;
-        setStage({ type: "cloning", repoUrl, cloneUrl });
+        const { repoUrl } = stage;
+        const launch = stage.launchAnalysis ?? false;
+        const cloneUrl = toCloneUrl(repoUrl);
+        setStage({ type: "cloning", repoUrl });
         startCloneRepo(cloneUrl).then((result) => {
           if (result.done) {
             const repoName =
@@ -362,18 +368,29 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
                 ?.replace(/\.git$/, "") ?? "repo";
             const destPath = path.join(os.tmpdir(), repoName);
             const fileCount = walkDir(destPath).length;
-            setStage({ type: "clone-done", repoUrl, destPath, fileCount });
+            appendHistory({
+              kind: "url-fetched",
+              detail: repoUrl,
+              summary: `Cloned ${repoName} — ${fileCount} files`,
+              repoPath,
+            });
+            setClonedUrls((prev) => new Set([...prev, repoUrl]));
+            setStage({
+              type: "clone-done",
+              repoUrl,
+              destPath,
+              fileCount,
+              launchAnalysis: launch,
+            });
           } else if (result.folderExists && result.repoPath) {
             setStage({
               type: "clone-exists",
               repoUrl,
-              cloneUrl,
               repoPath: result.repoPath,
             });
           } else {
             setStage({
               type: "clone-error",
-              repoUrl,
               message:
                 !result.folderExists && result.error
                   ? result.error
@@ -388,11 +405,12 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    //
+    // ── clone-exists ───────────────────────────────────────────────
     if (stage.type === "clone-exists") {
       if (input === "y" || input === "Y") {
-        const { repoUrl, cloneUrl, repoPath: existingPath } = stage;
-        setStage({ type: "cloning", repoUrl, cloneUrl });
+        const { repoUrl, repoPath: existingPath } = stage;
+        const cloneUrl = toCloneUrl(repoUrl);
+        setStage({ type: "cloning", repoUrl });
         startCloneRepo(cloneUrl, { forceReclone: true }).then((result) => {
           if (result.done) {
             const fileCount = walkDir(existingPath).length;
@@ -405,7 +423,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
           } else {
             setStage({
               type: "clone-error",
-              repoUrl,
               message:
                 !result.folderExists && result.error
                   ? result.error
@@ -429,16 +446,43 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    //
+    // ── clone-done / clone-error ───────────────────────────────────
     if (stage.type === "clone-done" || stage.type === "clone-error") {
-      if (key.return || key.escape) setStage({ type: "idle" });
+      if (key.return || key.escape) {
+        if (stage.type === "clone-done") {
+          const repoName = stage.repoUrl.split("/").pop() ?? "repo";
+          // Add a plain assistant message summarising the clone — no model call,
+          // no auto-reading. The user can ask follow-up questions themselves.
+          const summaryMsg: Message = {
+            role: "assistant",
+            type: "text",
+            content: `Cloned **${repoName}** (${stage.fileCount} files) to \`${stage.destPath}\`.\n\nAsk me anything about it — I can read files, explain how it works, or suggest improvements.`,
+          };
+          // Also inject a silent context message so the model knows the path
+          // when the user asks a follow-up question.
+          const contextMsg: Message = {
+            role: "assistant",
+            type: "tool",
+            toolName: "fetch",
+            content: stage.repoUrl,
+            result: `Clone complete. Repo: ${repoName}. Local path: ${stage.destPath}. ${stage.fileCount} files. Use read-file with full path e.g. read-file ${stage.destPath}/README.md`,
+            approved: true,
+          };
+          const withClone = [...allMessages, contextMsg, summaryMsg];
+          setAllMessages(withClone);
+          setCommitted((prev) => [...prev, summaryMsg]);
+          setStage({ type: "idle" });
+        } else {
+          setStage({ type: "idle" });
+        }
+      }
       return;
     }
 
-    //
+    // ── cloning — no input ─────────────────────────────────────────
     if (stage.type === "cloning") return;
 
-    //
+    // ── permission ─────────────────────────────────────────────────
     if (stage.type === "permission") {
       if (input === "y" || input === "Y" || key.return) {
         stage.resolve(true);
@@ -451,7 +495,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    //
+    // ── preview ────────────────────────────────────────────────────
     if (stage.type === "preview") {
       if (key.upArrow) {
         setStage({
@@ -511,7 +555,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       }
     }
 
-    //
+    // ── viewing-file ───────────────────────────────────────────────
     if (stage.type === "viewing-file") {
       if (key.upArrow) {
         setStage({
@@ -531,7 +575,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     }
   });
 
-  //
+  // ── Provider setup ──────────────────────────────────────────────────────────
 
   const handleProviderDone = (p: Provider) => {
     setProvider(p);
@@ -541,13 +585,30 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       .then((fileTree) => {
         const importantFiles = readImportantFiles(repoPath, fileTree);
         const historySummary = buildHistorySummary(repoPath);
-        setSystemPrompt(buildSystemPrompt(importantFiles, historySummary));
+        const lensFile = readLensFile(repoPath);
+        const lensContext = lensFile
+          ? `
+
+## LENS.md (previous analysis)
+${lensFile.overview}
+
+Important folders: ${lensFile.importantFolders.join(", ")}
+Suggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
+          : "";
+        setSystemPrompt(
+          buildSystemPrompt(importantFiles, historySummary) + lensContext,
+        );
         const historyNote = historySummary
           ? "\n\nI have memory of previous actions in this repo."
           : "";
+        const lensGreetNote = lensFile
+          ? "\n\nFound LENS.md — I have context from a previous analysis of this repo."
+          : "";
         const greeting: Message = {
           role: "assistant",
-          content: `Codebase loaded — ${importantFiles.length} files indexed.${historyNote}\n\nAsk me anything, tell me what to build, share a URL, or ask me to read/write files.`,
+          content: `Welcome to Lens 
+Codebase loaded — ${importantFiles.length} files indexed.${historyNote}${lensGreetNote}
+Ask me anything, tell me what to build, share a URL, or ask me to read/write files.`,
           type: "text",
         };
         setCommitted([greeting]);
@@ -557,18 +618,21 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       .catch(() => setStage({ type: "idle" }));
   };
 
-  //
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   if (stage.type === "picking-provider")
     return <ProviderPicker onDone={handleProviderDone} />;
 
   if (stage.type === "loading") {
     return (
-      <Box marginTop={1} gap={1}>
-        <Text color={ORANGE}>
+      <Box gap={1} marginTop={1}>
+        <Text color={ACCENT}>*</Text>
+        <Text color={ACCENT}>
           <Spinner />
         </Text>
-        <Text>Indexing codebase…</Text>
+        <Text color="gray" dimColor>
+          indexing codebase…
+        </Text>
       </Box>
     );
   }
@@ -587,20 +651,17 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   if (stage.type === "viewing-file")
     return <ViewingFileView stage={stage} committed={committed} />;
 
+  // idle / thinking / permission
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column">
       <Static items={committed}>
         {(msg, i) => <StaticMessage key={i} msg={msg} />}
       </Static>
 
       {stage.type === "thinking" && (
         <Box gap={1}>
-          <Text color={ORANGE}>
-            <Spinner />
-          </Text>
-          <Text color="gray" dimColor>
-            {thinkingPhrase}
-          </Text>
+          <Text color={ACCENT}>●</Text>
+          <TypewriterText text={thinkingPhrase} />
         </Box>
       )}
 
@@ -609,10 +670,17 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       )}
 
       {stage.type === "idle" && (
-        <>
-          <InputBox value={inputValue} />
+        <Box flexDirection="column">
+          <InputBox
+            value={inputValue}
+            onChange={setInputValue}
+            onSubmit={(val) => {
+              if (val.trim()) sendMessage(val.trim());
+              setInputValue("");
+            }}
+          />
           <ShortcutBar />
-        </>
+        </Box>
       )}
     </Box>
   );
