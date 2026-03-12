@@ -214,9 +214,7 @@ export async function requestFileList(
       try {
         const content = readFileSync(fullPath, "utf-8");
         files.push({ path: filePath, content });
-      } catch {
-        // skip unreadable files
-      }
+      } catch {}
     }
   }
   return files;

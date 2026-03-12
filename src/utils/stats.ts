@@ -4,7 +4,7 @@ import path from "path";
 export type CodeStats = {
   totalFiles: number;
   totalLines: number;
-  languages: Record<string, number>; // ext -> file count
+  languages: Record<string, number>;
   functions: number;
   classes: number;
   blankLines: number;
@@ -82,7 +82,6 @@ function countFunctionsAndClasses(
   let classes = 0;
 
   if ([".ts", ".tsx", ".js", ".jsx"].includes(ext)) {
-    // functions: function declarations, arrow functions assigned to const, methods
     const fnMatches = content.match(
       /(?:^|\s)(?:function\s+\w+|const\s+\w+\s*=\s*(?:async\s*)?\(|(?:async\s+)?\w+\s*\([^)]*\)\s*(?::\s*\w+)?\s*\{|\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)/gm,
     );
@@ -116,7 +115,6 @@ export function computeStats(repoPath: string, files: string[]): CodeStats {
   };
 
   for (const filePath of files) {
-    // Skip files inside ignored dirs
     const parts = filePath.split(/[/\\]/);
     if (parts.some((p) => SKIP_DIRS.has(p))) continue;
     if (isBinary(filePath)) continue;
@@ -153,9 +151,7 @@ export function computeStats(repoPath: string, files: string[]): CodeStats {
       const { functions, classes } = countFunctionsAndClasses(content, ext);
       stats.functions += functions;
       stats.classes += classes;
-    } catch {
-      // skip unreadable
-    }
+    } catch {}
   }
 
   return stats;

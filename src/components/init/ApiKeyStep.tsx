@@ -68,8 +68,6 @@ const useFieldInput = (initial: string, onPasteError: (v: boolean) => void) => {
   return { value, setValue, handle };
 };
 
-// ── Non-custom ────────────────────────────────────────────────────────────────
-
 const SimpleInput = ({
   providerType,
   onSubmit,
@@ -119,8 +117,6 @@ const SimpleInput = ({
     </Box>
   );
 };
-
-// ── Custom (api key + base url) ───────────────────────────────────────────────
 
 const CustomInput = ({
   onSubmit,
@@ -223,8 +219,6 @@ const CustomInput = ({
     </Box>
   );
 };
-
-// ── Export ────────────────────────────────────────────────────────────────────
 
 export const ApiKeyStep = ({
   providerType,

@@ -102,9 +102,7 @@ export function buildDiffs(
     let oldContent = "";
     try {
       oldContent = readFileSync(fullPath, "utf-8");
-    } catch {
-      // file doesn't exist yet
-    }
+    } catch {}
     return computeDiff(oldContent, patch.content);
   });
 }

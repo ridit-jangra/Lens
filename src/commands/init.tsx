@@ -121,7 +121,6 @@ export const InitCommand = () => {
           providerType={stage.providerType}
           onSubmit={(value) => {
             if (stage.providerType === "custom") {
-              // value is CustomResult { apiKey, baseUrl? }
               const { apiKey, baseUrl } = value as {
                 apiKey: string;
                 baseUrl?: string;
@@ -208,7 +207,6 @@ export const InitCommand = () => {
     );
   }
 
-  // done
   return (
     <Box flexDirection="column" gap={1}>
       {completedSteps.map((s, i) => (

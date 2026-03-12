@@ -40,7 +40,6 @@ export const PreviewRunner = ({
       return;
     }
 
-    // Install
     setStage({ type: "installing", logs: [] });
     const installer = runInstall(repoPath, info.installCmd);
     const installLogs: string[] = [];
@@ -62,7 +61,6 @@ export const PreviewRunner = ({
         return;
       }
 
-      // Start dev server
       setStage({ type: "starting", logs: [] });
       const dev = runDev(repoPath, info.devCmd);
       devProcess.current = dev;

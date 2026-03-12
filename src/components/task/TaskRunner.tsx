@@ -233,11 +233,11 @@ export const PromptRunner = ({
       if (key.downArrow)
         setStage({ ...stage, scrollOffset: stage.scrollOffset + 1 });
       if (key.escape || key.return) {
-        // restore done stage — need applied list; grab from current viewing context
-        // We store a ref via a small workaround: re-derive from files we already have
+        
+        
         setStage((prev) => {
           if (prev.type !== "viewing-file") return prev;
-          // Can't go back to done without the applied list — use process.exit instead
+          
           process.exit(0);
           return prev;
         });
@@ -250,12 +250,12 @@ export const PromptRunner = ({
     }
   });
 
-  // ── picking-provider ───────────────────────────────────────────
+  
   if (stage.type === "picking-provider") {
     return <ProviderPicker onDone={handleProviderDone} />;
   }
 
-  // ── reading-files ──────────────────────────────────────────────
+  
   if (stage.type === "reading-files") {
     return (
       <Box marginTop={1} gap={1}>
@@ -267,7 +267,7 @@ export const PromptRunner = ({
     );
   }
 
-  // ── thinking ───────────────────────────────────────────────────
+  
   if (stage.type === "thinking") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
@@ -288,7 +288,7 @@ export const PromptRunner = ({
     );
   }
 
-  // ── preview ────────────────────────────────────────────────────
+  
   if (stage.type === "preview") {
     const { plan, diffLines, scrollOffset } = stage;
     return (
@@ -317,7 +317,7 @@ export const PromptRunner = ({
     );
   }
 
-  // ── applying ───────────────────────────────────────────────────
+  
   if (stage.type === "applying") {
     return (
       <Box marginTop={1} gap={1}>
@@ -329,7 +329,7 @@ export const PromptRunner = ({
     );
   }
 
-  // ── done ───────────────────────────────────────────────────────
+  
   if (stage.type === "done") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
@@ -359,7 +359,7 @@ export const PromptRunner = ({
     );
   }
 
-  // ── viewing-file ───────────────────────────────────────────────
+  
   if (stage.type === "viewing-file") {
     const { file, diffLines, scrollOffset } = stage;
     return (
@@ -383,7 +383,7 @@ export const PromptRunner = ({
     );
   }
 
-  // ── error ──────────────────────────────────────────────────────
+  
   if (stage.type === "error") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>

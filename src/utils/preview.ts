@@ -4,7 +4,7 @@ import { spawn, type ChildProcess } from "child_process";
 import type { PackageManager, PreviewInfo } from "../types/repo";
 
 export function detectPreview(repoPath: string): PreviewInfo | null {
-  // Node / JS
+  
   const pkgPath = path.join(repoPath, "package.json");
   if (existsSync(pkgPath)) {
     try {
@@ -28,7 +28,7 @@ export function detectPreview(repoPath: string): PreviewInfo | null {
       const devCmd =
         pm === "npm" ? "npm run dev" : pm === "yarn" ? "yarn dev" : "pnpm dev";
 
-      // Try to sniff port from dev script
+      
       const portMatch = devScript.match(/--port[= ](\d+)/);
       const port = portMatch ? parseInt(portMatch[1]!, 10) : 5173;
 
@@ -48,7 +48,7 @@ export function detectPreview(repoPath: string): PreviewInfo | null {
     }
   }
 
-  // Python
+  
   if (
     existsSync(path.join(repoPath, "requirements.txt")) ||
     existsSync(path.join(repoPath, "pyproject.toml"))
