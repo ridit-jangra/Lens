@@ -48,6 +48,30 @@ export function PermissionPrompt({
     icon = "r";
     label = "read";
     value = tool.filePath;
+  } else if (tool.type === "read-folder") {
+    icon = "d";
+    label = "folder";
+    value = tool.folderPath;
+  } else if (tool.type === "grep") {
+    icon = "/";
+    label = "grep";
+    value = `${tool.pattern}  ${tool.glob}`;
+  } else if (tool.type === "delete-file") {
+    icon = "x";
+    label = "delete";
+    value = tool.filePath;
+  } else if (tool.type === "delete-folder") {
+    icon = "X";
+    label = "delete folder";
+    value = tool.folderPath;
+  } else if (tool.type === "open-url") {
+    icon = "↗";
+    label = "open";
+    value = tool.url;
+  } else if (tool.type === "generate-pdf") {
+    icon = "P";
+    label = "pdf";
+    value = tool.filePath;
   } else if (tool.type === "write-file") {
     icon = "w";
     label = "write";
@@ -128,11 +152,14 @@ export function TypewriterText({
   return <Text color={color}>{displayed}</Text>;
 }
 
-export function ShortcutBar() {
+export function ShortcutBar({ autoApprove }: { autoApprove?: boolean }) {
   return (
     <Box gap={3} marginTop={0}>
       <Text color="gray" dimColor>
         enter send · ^v paste · ^c exit
+      </Text>
+      <Text color={autoApprove ? "green" : "gray"} dimColor={!autoApprove}>
+        {autoApprove ? "⚡ auto" : "/auto"}
       </Text>
     </Box>
   );
