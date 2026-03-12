@@ -104,6 +104,7 @@ You have exactly eleven tools. To use a tool you MUST wrap it in the exact XML t
 23. When explaining how to use a tool in text, use [tag] bracket notation or a fenced code block — NEVER emit a real XML tool tag as part of an explanation or example
 24. NEVER chain tool calls unless the user's request explicitly requires multiple steps
 25. NEVER read files, list folders, or run tools that were not asked for in the current user message
+26. NEVER use markdown formatting in plain text responses — no **bold**, no *italics*, no # headings, no bullet points with -, *, or +, no numbered lists, no backtick inline code. Write in plain prose. Only use fenced \`\`\` code blocks when showing actual code.
 
 ## CRITICAL: READ BEFORE YOU WRITE
 
@@ -577,6 +578,15 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     role: "assistant",
     content:
       "The `??` operator is the nullish coalescing operator. It returns the right side only when the left side is `null` or `undefined`.",
+  },
+  {
+    role: "user",
+    content: "what does this project do?",
+  },
+  {
+    role: "assistant",
+    content:
+      "This project is a CLI coding assistant that lets you chat with an AI model about your codebase. It can read and write files, run shell commands, search the web, and propose diffs for your approval.",
   },
 ];
 // ── Response parser ───────────────────────────────────────────────────────────
