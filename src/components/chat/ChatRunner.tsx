@@ -1,182 +1,877 @@
 import React from "react";
-import { Box, Text } from "ink";
+import { Box, Text, Static, useInput } from "ink";
+import Spinner from "ink-spinner";
+import { useState, useRef } from "react";
+import path from "path";
+import os from "os";
 import { ACCENT } from "../../colors";
-import type { Message } from "../../types/chat";
+import { buildDiffs } from "../repo/DiffViewer";
+import { ProviderPicker } from "../repo/ProviderPicker";
+import { fetchFileTree, readImportantFiles } from "../../utils/files";
+import { startCloneRepo } from "../../utils/repo";
+import { useThinkingPhrase } from "../../utils/thinking";
+import {
+  walkDir,
+  readClipboard,
+  applyPatches,
+  extractGithubUrl,
+  toCloneUrl,
+  parseCloneTag,
+  runShell,
+  fetchUrl,
+  readFile,
+  readFolder,
+  grepFiles,
+  deleteFile,
+  deleteFolder,
+  openUrl,
+  generatePdf,
+  writeFile,
+  buildSystemPrompt,
+  parseResponse,
+  callChat,
+  searchWeb,
+} from "../../utils/chat";
+import { StaticMessage } from "./ChatMessage";
+import {
+  PermissionPrompt,
+  InputBox,
+  ShortcutBar,
+  TypewriterText,
+  CloneOfferView,
+  CloningView,
+  CloneExistsView,
+  CloneDoneView,
+  CloneErrorView,
+  PreviewView,
+  ViewingFileView,
+} from "./ChatOverlays";
+import { TimelineRunner } from "../timeline/TimelineRunner";
+import type { Provider } from "../../types/config";
+import type { Message, ChatStage } from "../../types/chat";
+import {
+  appendHistory,
+  buildHistorySummary,
+  clearRepoHistory,
+} from "../../utils/history";
+import { readLensFile } from "../../utils/lensfile";
+import { ReviewCommand } from "../../commands/review";
 
-function InlineText({ text }: { text: string }) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+const COMMANDS = [
+  { cmd: "/timeline", desc: "browse commit history" },
+  { cmd: "/clear history", desc: "wipe session memory for this repo" },
+  { cmd: "/review", desc: "review current codebsae" },
+  { cmd: "/auto", desc: "toggle auto-approve for read/search tools" },
+];
+
+function CommandPalette({
+  query,
+  onSelect,
+}: {
+  query: string;
+  onSelect: (cmd: string) => void;
+}) {
+  const q = query.toLowerCase();
+  const matches = COMMANDS.filter((c) => c.cmd.startsWith(q));
+  if (!matches.length) return null;
+
   return (
-    <>
-      {parts.map((part, i) => {
-        if (part.startsWith("`") && part.endsWith("`")) {
-          return (
-            <Text key={i} color={ACCENT}>
-              {part.slice(1, -1)}
-            </Text>
-          );
-        }
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return (
-            <Text key={i} bold color="white">
-              {part.slice(2, -2)}
-            </Text>
-          );
-        }
+    <Box flexDirection="column" marginBottom={1} marginLeft={2}>
+      {matches.map((c, i) => {
+        const isExact = c.cmd === query;
         return (
-          <Text key={i} color="white">
-            {part}
-          </Text>
+          <Box key={i} gap={2}>
+            <Text color={isExact ? ACCENT : "white"} bold={isExact}>
+              {c.cmd}
+            </Text>
+            <Text color="gray" dimColor>
+              {c.desc}
+            </Text>
+          </Box>
         );
       })}
-    </>
-  );
-}
-
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
-  return (
-    <Box flexDirection="column" marginY={1} marginLeft={2}>
-      {lang && <Text color="gray">{lang}</Text>}
-      {code.split("\n").map((line, i) => (
-        <Text key={i} color={ACCENT}>
-          {"  "}
-          {line}
-        </Text>
-      ))}
     </Box>
   );
 }
 
-function MessageBody({ content }: { content: string }) {
-  const segments = content.split(/(```[\s\S]*?```)/g);
+export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
+  const [stage, setStage] = useState<ChatStage>({ type: "picking-provider" });
+  const [committed, setCommitted] = useState<Message[]>([]);
+  const [provider, setProvider] = useState<Provider | null>(null);
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [inputValue, setInputValue] = useState("");
+  const [pendingMsgIndex, setPendingMsgIndex] = useState<number | null>(null);
+  const [allMessages, setAllMessages] = useState<Message[]>([]);
+  const [clonedUrls, setClonedUrls] = useState<Set<string>>(new Set());
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [autoApprove, setAutoApprove] = useState(false);
+
+  // Cache of tool results within a single conversation turn to prevent
+  // the model from re-calling tools it already ran with the same args
+  const toolResultCache = useRef<Map<string, string>>(new Map());
+
+  const inputBuffer = useRef("");
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const thinkingPhrase = useThinkingPhrase(stage.type === "thinking");
+
+  const flushBuffer = () => {
+    const buf = inputBuffer.current;
+    if (!buf) return;
+    inputBuffer.current = "";
+    setInputValue((v) => v + buf);
+  };
+
+  const scheduleFlush = () => {
+    if (flushTimer.current !== null) return;
+    flushTimer.current = setTimeout(() => {
+      flushTimer.current = null;
+      flushBuffer();
+    }, 16);
+  };
+
+  const handleError = (currentAll: Message[]) => (err: unknown) => {
+    const errMsg: Message = {
+      role: "assistant",
+      content: `Error: ${err instanceof Error ? err.message : "Something went wrong"}`,
+      type: "text",
+    };
+    setAllMessages([...currentAll, errMsg]);
+    setCommitted((prev) => [...prev, errMsg]);
+    setStage({ type: "idle" });
+  };
+
+  const processResponse = (raw: string, currentAll: Message[]) => {
+    const parsed = parseResponse(raw);
+
+    if (parsed.kind === "changes") {
+      if (parsed.patches.length === 0) {
+        const msg: Message = {
+          role: "assistant",
+          content: parsed.content,
+          type: "text",
+        };
+        setAllMessages([...currentAll, msg]);
+        setCommitted((prev) => [...prev, msg]);
+        setStage({ type: "idle" });
+        return;
+      }
+      const assistantMsg: Message = {
+        role: "assistant",
+        content: parsed.content,
+        type: "plan",
+        patches: parsed.patches,
+        applied: false,
+      };
+      const withAssistant = [...currentAll, assistantMsg];
+      setAllMessages(withAssistant);
+      setPendingMsgIndex(withAssistant.length - 1);
+      const diffLines = buildDiffs(repoPath, parsed.patches);
+      setStage({
+        type: "preview",
+        patches: parsed.patches,
+        diffLines,
+        scrollOffset: 0,
+        pendingMessages: currentAll,
+      });
+      return;
+    }
+
+    if (
+      parsed.kind === "shell" ||
+      parsed.kind === "fetch" ||
+      parsed.kind === "read-file" ||
+      parsed.kind === "read-folder" ||
+      parsed.kind === "grep" ||
+      parsed.kind === "write-file" ||
+      parsed.kind === "delete-file" ||
+      parsed.kind === "delete-folder" ||
+      parsed.kind === "open-url" ||
+      parsed.kind === "generate-pdf" ||
+      parsed.kind === "search"
+    ) {
+      let tool: Parameters<typeof PermissionPrompt>[0]["tool"];
+      if (parsed.kind === "shell") {
+        tool = { type: "shell", command: parsed.command };
+      } else if (parsed.kind === "fetch") {
+        tool = { type: "fetch", url: parsed.url };
+      } else if (parsed.kind === "read-file") {
+        tool = { type: "read-file", filePath: parsed.filePath };
+      } else if (parsed.kind === "read-folder") {
+        tool = { type: "read-folder", folderPath: parsed.folderPath };
+      } else if (parsed.kind === "grep") {
+        tool = { type: "grep", pattern: parsed.pattern, glob: parsed.glob };
+      } else if (parsed.kind === "delete-file") {
+        tool = { type: "delete-file", filePath: parsed.filePath };
+      } else if (parsed.kind === "delete-folder") {
+        tool = { type: "delete-folder", folderPath: parsed.folderPath };
+      } else if (parsed.kind === "open-url") {
+        tool = { type: "open-url", url: parsed.url };
+      } else if (parsed.kind === "generate-pdf") {
+        tool = {
+          type: "generate-pdf",
+          filePath: parsed.filePath,
+          content: parsed.pdfContent,
+        };
+      } else if (parsed.kind === "search") {
+        tool = { type: "search", query: parsed.query };
+      } else {
+        tool = {
+          type: "write-file",
+          filePath: parsed.filePath,
+          fileContent: parsed.fileContent,
+        };
+      }
+
+      if (parsed.content) {
+        const preambleMsg: Message = {
+          role: "assistant",
+          content: parsed.content,
+          type: "text",
+        };
+        setAllMessages([...currentAll, preambleMsg]);
+        setCommitted((prev) => [...prev, preambleMsg]);
+      }
+
+      // Safe tools that can be auto-approved (no side effects)
+      const isSafeTool =
+        parsed.kind === "read-file" ||
+        parsed.kind === "read-folder" ||
+        parsed.kind === "grep" ||
+        parsed.kind === "fetch" ||
+        parsed.kind === "open-url" ||
+        parsed.kind === "search";
+
+      const executeAndContinue = async (approved: boolean) => {
+        let result = "(denied by user)";
+        if (approved) {
+          // Build a cache key for idempotent read-only tools
+          const cacheKey =
+            parsed.kind === "read-file"
+              ? `read-file:${parsed.filePath}`
+              : parsed.kind === "read-folder"
+                ? `read-folder:${parsed.folderPath}`
+                : parsed.kind === "grep"
+                  ? `grep:${parsed.pattern}:${parsed.glob}`
+                  : null;
+
+          if (cacheKey && toolResultCache.current.has(cacheKey)) {
+            // Return cached result with a note so the model stops retrying
+            result =
+              toolResultCache.current.get(cacheKey)! +
+              "\n\n[NOTE: This result was already retrieved earlier. Do not request it again.]";
+          } else {
+            try {
+              setStage({ type: "thinking" });
+              if (parsed.kind === "shell") {
+                result = await runShell(parsed.command, repoPath);
+              } else if (parsed.kind === "fetch") {
+                result = await fetchUrl(parsed.url);
+              } else if (parsed.kind === "read-file") {
+                result = readFile(parsed.filePath, repoPath);
+              } else if (parsed.kind === "read-folder") {
+                result = readFolder(parsed.folderPath, repoPath);
+              } else if (parsed.kind === "grep") {
+                result = grepFiles(parsed.pattern, parsed.glob, repoPath);
+              } else if (parsed.kind === "delete-file") {
+                result = deleteFile(parsed.filePath, repoPath);
+              } else if (parsed.kind === "delete-folder") {
+                result = deleteFolder(parsed.folderPath, repoPath);
+              } else if (parsed.kind === "open-url") {
+                result = openUrl(parsed.url);
+              } else if (parsed.kind === "generate-pdf") {
+                result = generatePdf(
+                  parsed.filePath,
+                  parsed.pdfContent,
+                  repoPath,
+                );
+              } else if (parsed.kind === "write-file") {
+                result = writeFile(
+                  parsed.filePath,
+                  parsed.fileContent,
+                  repoPath,
+                );
+              } else if (parsed.kind === "search") {
+                result = await searchWeb(parsed.query);
+              }
+              // Store result in cache for cacheable tools
+              if (cacheKey) {
+                toolResultCache.current.set(cacheKey, result);
+              }
+            } catch (err: unknown) {
+              result = `Error: ${err instanceof Error ? err.message : "failed"}`;
+            }
+          }
+        }
+
+        if (approved && !result.startsWith("Error:")) {
+          const kindMap = {
+            shell: "shell-run",
+            fetch: "url-fetched",
+            "read-file": "file-read",
+            "read-folder": "file-read",
+            grep: "file-read",
+            "delete-file": "file-written",
+            "delete-folder": "file-written",
+            "open-url": "url-fetched",
+            "generate-pdf": "file-written",
+            "write-file": "file-written",
+            search: "url-fetched",
+          } as const;
+          appendHistory({
+            kind: kindMap[parsed.kind as keyof typeof kindMap] ?? "shell-run",
+            detail:
+              parsed.kind === "shell"
+                ? parsed.command
+                : parsed.kind === "fetch"
+                  ? parsed.url
+                  : parsed.kind === "search"
+                    ? parsed.query
+                    : parsed.kind === "read-folder"
+                      ? parsed.folderPath
+                      : parsed.kind === "grep"
+                        ? `${parsed.pattern} ${parsed.glob}`
+                        : parsed.kind === "delete-file"
+                          ? parsed.filePath
+                          : parsed.kind === "delete-folder"
+                            ? parsed.folderPath
+                            : parsed.kind === "open-url"
+                              ? parsed.url
+                              : parsed.kind === "generate-pdf"
+                                ? parsed.filePath
+                                : parsed.filePath,
+            summary: result.split("\n")[0]?.slice(0, 120) ?? "",
+            repoPath,
+          });
+        }
+
+        const toolName =
+          parsed.kind === "shell"
+            ? "shell"
+            : parsed.kind === "fetch"
+              ? "fetch"
+              : parsed.kind === "read-file"
+                ? "read-file"
+                : parsed.kind === "read-folder"
+                  ? "read-folder"
+                  : parsed.kind === "grep"
+                    ? "grep"
+                    : parsed.kind === "delete-file"
+                      ? "delete-file"
+                      : parsed.kind === "delete-folder"
+                        ? "delete-folder"
+                        : parsed.kind === "open-url"
+                          ? "open-url"
+                          : parsed.kind === "generate-pdf"
+                            ? "generate-pdf"
+                            : parsed.kind === "search"
+                              ? "search"
+                              : "write-file";
+
+        const toolContent =
+          parsed.kind === "shell"
+            ? parsed.command
+            : parsed.kind === "fetch"
+              ? parsed.url
+              : parsed.kind === "search"
+                ? parsed.query
+                : parsed.kind === "read-folder"
+                  ? parsed.folderPath
+                  : parsed.kind === "grep"
+                    ? `${parsed.pattern} — ${parsed.glob}`
+                    : parsed.kind === "delete-file"
+                      ? parsed.filePath
+                      : parsed.kind === "delete-folder"
+                        ? parsed.folderPath
+                        : parsed.kind === "open-url"
+                          ? parsed.url
+                          : parsed.kind === "generate-pdf"
+                            ? parsed.filePath
+                            : parsed.filePath;
+
+        const toolMsg: Message = {
+          role: "assistant",
+          type: "tool",
+          toolName,
+          content: toolContent,
+          result,
+          approved,
+        };
+
+        const withTool = [...currentAll, toolMsg];
+        setAllMessages(withTool);
+        setCommitted((prev) => [...prev, toolMsg]);
+
+        setStage({ type: "thinking" });
+        callChat(provider!, systemPrompt, withTool)
+          .then((r: string) => processResponse(r, withTool))
+          .catch(handleError(withTool));
+      };
+
+      if (autoApprove && isSafeTool) {
+        executeAndContinue(true);
+        return;
+      }
+
+      setStage({
+        type: "permission",
+        tool,
+        pendingMessages: currentAll,
+        resolve: executeAndContinue,
+      });
+      return;
+    }
+
+    if (parsed.kind === "clone") {
+      if (parsed.content) {
+        const preambleMsg: Message = {
+          role: "assistant",
+          content: parsed.content,
+          type: "text",
+        };
+        setAllMessages([...currentAll, preambleMsg]);
+        setCommitted((prev) => [...prev, preambleMsg]);
+      }
+      setStage({
+        type: "clone-offer",
+        repoUrl: parsed.repoUrl,
+        launchAnalysis: true,
+      });
+      return;
+    }
+
+    const msg: Message = {
+      role: "assistant",
+      content: parsed.content,
+      type: "text",
+    };
+    const withMsg = [...currentAll, msg];
+    setAllMessages(withMsg);
+    setCommitted((prev) => [...prev, msg]);
+
+    const lastUserMsg = [...currentAll]
+      .reverse()
+      .find((m) => m.role === "user");
+    const githubUrl = lastUserMsg
+      ? extractGithubUrl(lastUserMsg.content)
+      : null;
+
+    if (githubUrl && !clonedUrls.has(githubUrl)) {
+      setTimeout(() => {
+        setStage({ type: "clone-offer", repoUrl: githubUrl });
+      }, 80);
+    } else {
+      setStage({ type: "idle" });
+    }
+  };
+
+  const sendMessage = (text: string) => {
+    if (!provider) return;
+
+    if (text.trim().toLowerCase() === "/timeline") {
+      setShowTimeline(true);
+      return;
+    }
+
+    if (text.trim().toLowerCase() === "/review") {
+      setShowReview(true);
+      return;
+    }
+
+    if (text.trim().toLowerCase() === "/auto") {
+      const next = !autoApprove;
+      setAutoApprove(next);
+      const msg: Message = {
+        role: "assistant",
+        content: next
+          ? "Auto-approve ON — read, search, grep and folder tools will run without asking. Write and code changes still require approval."
+          : "Auto-approve OFF — all tools will ask for permission.",
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
+      return;
+    }
+
+    if (text.trim().toLowerCase() === "/clear history") {
+      clearRepoHistory(repoPath);
+      const clearedMsg: Message = {
+        role: "assistant",
+        content: "History cleared for this repo.",
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, clearedMsg]);
+      setAllMessages((prev) => [...prev, clearedMsg]);
+      return;
+    }
+
+    const userMsg: Message = { role: "user", content: text, type: "text" };
+    const nextAll = [...allMessages, userMsg];
+    setCommitted((prev) => [...prev, userMsg]);
+    setAllMessages(nextAll);
+    toolResultCache.current.clear();
+    setStage({ type: "thinking" });
+    callChat(provider, systemPrompt, nextAll)
+      .then((raw: string) => processResponse(raw, nextAll))
+      .catch(handleError(nextAll));
+  };
+
+  useInput((input, key) => {
+    if (showTimeline) return;
+
+    if (stage.type === "idle") {
+      if (key.ctrl && input === "c") {
+        process.exit(0);
+        return;
+      }
+
+      if (key.tab && inputValue.startsWith("/")) {
+        const q = inputValue.toLowerCase();
+        const match = COMMANDS.find((c) => c.cmd.startsWith(q));
+        if (match) setInputValue(match.cmd);
+        return;
+      }
+      return;
+    }
+
+    if (stage.type === "clone-offer") {
+      if (input === "y" || input === "Y" || key.return) {
+        const { repoUrl } = stage;
+        const launch = stage.launchAnalysis ?? false;
+        const cloneUrl = toCloneUrl(repoUrl);
+        setStage({ type: "cloning", repoUrl });
+        startCloneRepo(cloneUrl).then((result) => {
+          if (result.done) {
+            const repoName =
+              cloneUrl
+                .split("/")
+                .pop()
+                ?.replace(/\.git$/, "") ?? "repo";
+            const destPath = path.join(os.tmpdir(), repoName);
+            const fileCount = walkDir(destPath).length;
+            appendHistory({
+              kind: "url-fetched",
+              detail: repoUrl,
+              summary: `Cloned ${repoName} — ${fileCount} files`,
+              repoPath,
+            });
+            setClonedUrls((prev) => new Set([...prev, repoUrl]));
+            setStage({
+              type: "clone-done",
+              repoUrl,
+              destPath,
+              fileCount,
+              launchAnalysis: launch,
+            });
+          } else if (result.folderExists && result.repoPath) {
+            setStage({
+              type: "clone-exists",
+              repoUrl,
+              repoPath: result.repoPath,
+            });
+          } else {
+            setStage({
+              type: "clone-error",
+              message:
+                !result.folderExists && result.error
+                  ? result.error
+                  : "Clone failed",
+            });
+          }
+        });
+        return;
+      }
+      if (input === "n" || input === "N" || key.escape)
+        setStage({ type: "idle" });
+      return;
+    }
+
+    if (stage.type === "clone-exists") {
+      if (input === "y" || input === "Y") {
+        const { repoUrl, repoPath: existingPath } = stage;
+        const cloneUrl = toCloneUrl(repoUrl);
+        setStage({ type: "cloning", repoUrl });
+        startCloneRepo(cloneUrl, { forceReclone: true }).then((result) => {
+          if (result.done) {
+            const fileCount = walkDir(existingPath).length;
+            setStage({
+              type: "clone-done",
+              repoUrl,
+              destPath: existingPath,
+              fileCount,
+            });
+          } else {
+            setStage({
+              type: "clone-error",
+              message:
+                !result.folderExists && result.error
+                  ? result.error
+                  : "Clone failed",
+            });
+          }
+        });
+        return;
+      }
+      if (input === "n" || input === "N") {
+        const { repoUrl, repoPath: existingPath } = stage;
+        const fileCount = walkDir(existingPath).length;
+        setStage({
+          type: "clone-done",
+          repoUrl,
+          destPath: existingPath,
+          fileCount,
+        });
+        return;
+      }
+      return;
+    }
+
+    if (stage.type === "clone-done" || stage.type === "clone-error") {
+      if (key.return || key.escape) {
+        if (stage.type === "clone-done") {
+          const repoName = stage.repoUrl.split("/").pop() ?? "repo";
+
+          const summaryMsg: Message = {
+            role: "assistant",
+            type: "text",
+            content: `Cloned **${repoName}** (${stage.fileCount} files) to \`${stage.destPath}\`.\n\nAsk me anything about it — I can read files, explain how it works, or suggest improvements.`,
+          };
+
+          const contextMsg: Message = {
+            role: "assistant",
+            type: "tool",
+            toolName: "fetch",
+            content: stage.repoUrl,
+            result: `Clone complete. Repo: ${repoName}. Local path: ${stage.destPath}. ${stage.fileCount} files. Use read-file with full path e.g. read-file ${stage.destPath}/README.md`,
+            approved: true,
+          };
+          const withClone = [...allMessages, contextMsg, summaryMsg];
+          setAllMessages(withClone);
+          setCommitted((prev) => [...prev, summaryMsg]);
+          setStage({ type: "idle" });
+        } else {
+          setStage({ type: "idle" });
+        }
+      }
+      return;
+    }
+
+    if (stage.type === "cloning") return;
+
+    if (stage.type === "permission") {
+      if (input === "y" || input === "Y" || key.return) {
+        stage.resolve(true);
+        return;
+      }
+      if (input === "n" || input === "N" || key.escape) {
+        stage.resolve(false);
+        return;
+      }
+      return;
+    }
+
+    if (stage.type === "preview") {
+      if (key.upArrow) {
+        setStage({
+          ...stage,
+          scrollOffset: Math.max(0, stage.scrollOffset - 1),
+        });
+        return;
+      }
+      if (key.downArrow) {
+        setStage({ ...stage, scrollOffset: stage.scrollOffset + 1 });
+        return;
+      }
+      if (key.escape || input === "s" || input === "S") {
+        if (pendingMsgIndex !== null) {
+          const msg = allMessages[pendingMsgIndex];
+          if (msg?.type === "plan") {
+            setCommitted((prev) => [...prev, { ...msg, applied: false }]);
+            appendHistory({
+              kind: "code-skipped",
+              detail: msg.patches
+                .map((p: { path: string }) => p.path)
+                .join(", "),
+              summary: `Skipped changes to ${msg.patches.length} file(s)`,
+              repoPath,
+            });
+          }
+        }
+        setPendingMsgIndex(null);
+        setStage({ type: "idle" });
+        return;
+      }
+      if (key.return || input === "a" || input === "A") {
+        try {
+          applyPatches(repoPath, stage.patches);
+          appendHistory({
+            kind: "code-applied",
+            detail: stage.patches.map((p) => p.path).join(", "),
+            summary: `Applied changes to ${stage.patches.length} file(s)`,
+            repoPath,
+          });
+        } catch {
+          /* non-fatal */
+        }
+        if (pendingMsgIndex !== null) {
+          const msg = allMessages[pendingMsgIndex];
+          if (msg?.type === "plan") {
+            const applied: Message = { ...msg, applied: true };
+            setAllMessages((prev) =>
+              prev.map((m, i) => (i === pendingMsgIndex ? applied : m)),
+            );
+            setCommitted((prev) => [...prev, applied]);
+          }
+        }
+        setPendingMsgIndex(null);
+        setStage({ type: "idle" });
+        return;
+      }
+    }
+
+    if (stage.type === "viewing-file") {
+      if (key.upArrow) {
+        setStage({
+          ...stage,
+          scrollOffset: Math.max(0, stage.scrollOffset - 1),
+        });
+        return;
+      }
+      if (key.downArrow) {
+        setStage({ ...stage, scrollOffset: stage.scrollOffset + 1 });
+        return;
+      }
+      if (key.escape || key.return) {
+        setStage({ type: "idle" });
+        return;
+      }
+    }
+  });
+
+  const handleProviderDone = (p: Provider) => {
+    setProvider(p);
+    setStage({ type: "loading" });
+    fetchFileTree(repoPath)
+      .catch(() => walkDir(repoPath))
+      .then((fileTree) => {
+        const importantFiles = readImportantFiles(repoPath, fileTree);
+        const historySummary = buildHistorySummary(repoPath);
+        const lensFile = readLensFile(repoPath);
+        const lensContext = lensFile
+          ? `
+
+## LENS.md (previous analysis)
+${lensFile.overview}
+
+Important folders: ${lensFile.importantFolders.join(", ")}
+Suggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
+          : "";
+        setSystemPrompt(
+          buildSystemPrompt(importantFiles, historySummary) + lensContext,
+        );
+        const historyNote = historySummary
+          ? "\n\nI have memory of previous actions in this repo."
+          : "";
+        const lensGreetNote = lensFile
+          ? "\n\nFound LENS.md — I have context from a previous analysis of this repo."
+          : "";
+        const greeting: Message = {
+          role: "assistant",
+          content: `Welcome to Lens \nCodebase loaded — ${importantFiles.length} files indexed.${historyNote}${lensGreetNote}\nAsk me anything, tell me what to build, share a URL, or ask me to read/write files.\n\nTip: type /timeline to browse commit history.`,
+          type: "text",
+        };
+        setCommitted([greeting]);
+        setAllMessages([greeting]);
+        setStage({ type: "idle" });
+      })
+      .catch(() => setStage({ type: "idle" }));
+  };
+
+  if (stage.type === "picking-provider")
+    return <ProviderPicker onDone={handleProviderDone} />;
+
+  if (stage.type === "loading") {
+    return (
+      <Box gap={1} marginTop={1}>
+        <Text color={ACCENT}>*</Text>
+        <Text color={ACCENT}>
+          <Spinner />
+        </Text>
+        <Text color="gray" dimColor>
+          indexing codebase…
+        </Text>
+      </Box>
+    );
+  }
+
+  if (showTimeline) {
+    return (
+      <TimelineRunner
+        repoPath={repoPath}
+        onExit={() => setShowTimeline(false)}
+      />
+    );
+  }
+
+  if (showReview) {
+    return (
+      <ReviewCommand path={repoPath} onExit={() => setShowReview(false)} />
+    );
+  }
+
+  if (stage.type === "clone-offer")
+    return <CloneOfferView stage={stage} committed={committed} />;
+  if (stage.type === "cloning")
+    return <CloningView stage={stage} committed={committed} />;
+  if (stage.type === "clone-exists")
+    return <CloneExistsView stage={stage} committed={committed} />;
+  if (stage.type === "clone-done")
+    return <CloneDoneView stage={stage} committed={committed} />;
+  if (stage.type === "clone-error")
+    return <CloneErrorView stage={stage} committed={committed} />;
+  if (stage.type === "preview")
+    return <PreviewView stage={stage} committed={committed} />;
+  if (stage.type === "viewing-file")
+    return <ViewingFileView stage={stage} committed={committed} />;
 
   return (
     <Box flexDirection="column">
-      {segments.map((seg, si) => {
-        if (seg.startsWith("```")) {
-          const lines = seg.slice(3).split("\n");
-          const lang = lines[0]?.trim() ?? "";
-          const code = lines
-            .slice(1)
-            .join("\n")
-            .replace(/```\s*$/, "")
-            .trimEnd();
-          return <CodeBlock key={si} lang={lang} code={code} />;
-        }
+      <Static items={committed}>
+        {(msg, i) => <StaticMessage key={i} msg={msg} />}
+      </Static>
 
-        const lines = seg.split("\n").filter((l) => l.trim() !== "");
-        return (
-          <Box key={si} flexDirection="column">
-            {lines.map((line, li) => {
-              if (line.match(/^[-*•]\s/)) {
-                return (
-                  <Box key={li} gap={1}>
-                    <Text color={ACCENT}>*</Text>
-                    <InlineText text={line.slice(2).trim()} />
-                  </Box>
-                );
-              }
+      {stage.type === "thinking" && (
+        <Box gap={1}>
+          <Text color={ACCENT}>●</Text>
+          <TypewriterText text={thinkingPhrase} />
+        </Box>
+      )}
 
-              if (line.match(/^\d+\.\s/)) {
-                const num = line.match(/^(\d+)\.\s/)![1];
-                return (
-                  <Box key={li} gap={1}>
-                    <Text color="gray">{num}.</Text>
-                    <InlineText text={line.replace(/^\d+\.\s/, "").trim()} />
-                  </Box>
-                );
-              }
+      {stage.type === "permission" && (
+        <PermissionPrompt tool={stage.tool} onDecide={stage.resolve} />
+      )}
 
-              return (
-                <Box key={li}>
-                  <InlineText text={line} />
-                </Box>
-              );
-            })}
-          </Box>
-        );
-      })}
+      {stage.type === "idle" && (
+        <Box flexDirection="column">
+          {inputValue.startsWith("/") && (
+            <CommandPalette
+              query={inputValue}
+              onSelect={(cmd) => {
+                setInputValue(cmd);
+              }}
+            />
+          )}
+          <InputBox
+            value={inputValue}
+            onChange={setInputValue}
+            onSubmit={(val) => {
+              if (val.trim()) sendMessage(val.trim());
+              setInputValue("");
+            }}
+          />
+          <ShortcutBar autoApprove={autoApprove} />
+        </Box>
+      )}
     </Box>
   );
-}
-
-export function StaticMessage({ msg }: { msg: Message }) {
-  if (msg.role === "user") {
-    return (
-      <Box marginBottom={1} gap={1}>
-        <Text color="gray">{">"}</Text>
-        <Text color="white" bold>
-          {msg.content}
-        </Text>
-      </Box>
-    );
-  }
-
-  if (msg.type === "tool") {
-    const icons: Record<string, string> = {
-      shell: "$",
-      fetch: "~>",
-      "read-file": "r",
-      "read-folder": "d",
-      grep: "/",
-      "delete-file": "x",
-      "delete-folder": "X",
-      "open-url": "↗",
-      "generate-pdf": "P",
-      "write-file": "w",
-      search: "?",
-    };
-    const icon = icons[msg.toolName] ?? "·";
-    const label =
-      msg.toolName === "shell"
-        ? msg.content
-        : msg.toolName === "search"
-          ? `"${msg.content}"`
-          : msg.content;
-
-    return (
-      <Box flexDirection="column" marginBottom={1}>
-        <Box gap={1}>
-          <Text color={msg.approved ? ACCENT : "red"}>{icon}</Text>
-          <Text color={msg.approved ? "gray" : "red"} dimColor={!msg.approved}>
-            {label}
-          </Text>
-          {!msg.approved && <Text color="red">denied</Text>}
-        </Box>
-        {msg.approved && msg.result && (
-          <Box marginLeft={2}>
-            <Text color="gray">
-              {msg.result.split("\n")[0]?.slice(0, 120)}
-              {(msg.result.split("\n")[0]?.length ?? 0) > 120 ? "…" : ""}
-            </Text>
-          </Box>
-        )}
-      </Box>
-    );
-  }
-
-  if (msg.type === "plan") {
-    return (
-      <Box flexDirection="column" marginBottom={1}>
-        <Box gap={1}>
-          <Text color={ACCENT}>*</Text>
-          <MessageBody content={msg.content} />
-        </Box>
-        <Box marginLeft={2} gap={1}>
-          <Text color={msg.applied ? "green" : "gray"}>
-            {msg.applied ? "✓" : "·"}
-          </Text>
-          <Text color={msg.applied ? "green" : "gray"} dimColor={!msg.applied}>
-            {msg.applied ? "changes applied" : "changes skipped"}
-          </Text>
-        </Box>
-      </Box>
-    );
-  }
-
-  return (
-    <Box marginBottom={1} gap={1}>
-      <Text color={ACCENT}>●</Text>
-      <MessageBody content={msg.content} />
-    </Box>
-  );
-}
+};

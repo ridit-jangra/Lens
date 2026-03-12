@@ -121,6 +121,7 @@ export function StaticMessage({ msg }: { msg: Message }) {
       "delete-file": "x",
       "delete-folder": "X",
       "open-url": "↗",
+      "generate-pdf": "P",
       "write-file": "w",
       search: "?",
     };
