@@ -63,8 +63,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const thinkingPhrase = useThinkingPhrase(stage.type === "thinking");
 
-  // ── Input buffering ─────────────────────────────────────────────────────────
-
   const flushBuffer = () => {
     const buf = inputBuffer.current;
     if (!buf) return;
@@ -80,8 +78,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     }, 16);
   };
 
-  // ── Response handling ───────────────────────────────────────────────────────
-
   const handleError = (currentAll: Message[]) => (err: unknown) => {
     const errMsg: Message = {
       role: "assistant",
@@ -96,7 +92,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const processResponse = (raw: string, currentAll: Message[]) => {
     const parsed = parseResponse(raw);
 
-    // ── code changes ──────────────────────────────────────────────
     if (parsed.kind === "changes") {
       if (parsed.patches.length === 0) {
         const msg: Message = {
@@ -130,7 +125,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── tool calls ────────────────────────────────────────────────
     if (
       parsed.kind === "shell" ||
       parsed.kind === "fetch" ||
@@ -194,7 +188,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             }
           }
 
-          // Record to persistent history
           if (approved && !result.startsWith("Error:")) {
             const kindMap = {
               shell: "shell-run",
@@ -260,7 +253,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── clone tag ─────────────────────────────────────────────────
     if (parsed.kind === "clone") {
       if (parsed.content) {
         const preambleMsg: Message = {
@@ -279,7 +271,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── plain text ────────────────────────────────────────────────
     const msg: Message = {
       role: "assistant",
       content: parsed.content,
@@ -289,8 +280,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     setAllMessages(withMsg);
     setCommitted((prev) => [...prev, msg]);
 
-    // Only check the single most-recent user message to avoid the model's
-    // own responses (which mention the URL) re-triggering the clone offer.
     const lastUserMsg = [...currentAll]
       .reverse()
       .find((m) => m.role === "user");
@@ -332,27 +321,16 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       .catch(handleError(nextAll));
   };
 
-  // ── Input handler ───────────────────────────────────────────────────────────
-
   useInput((input, key) => {
-    // ── idle ───────────────────────────────────────────────────────
     if (stage.type === "idle") {
       if (key.ctrl && input === "c") {
         process.exit(0);
         return;
       }
 
-      // if (key.ctrl && (input === "v" || input === "V")) {
-      //   flushBuffer();
-      //   const clip = readClipboard();
-      //   if (clip) setInputValue((v) => v + clip);
-      //   return;
-      // }
-
       return;
     }
 
-    // ── clone-offer ────────────────────────────────────────────────
     if (stage.type === "clone-offer") {
       if (input === "y" || input === "Y" || key.return) {
         const { repoUrl } = stage;
@@ -405,7 +383,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── clone-exists ───────────────────────────────────────────────
     if (stage.type === "clone-exists") {
       if (input === "y" || input === "Y") {
         const { repoUrl, repoPath: existingPath } = stage;
@@ -446,20 +423,17 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── clone-done / clone-error ───────────────────────────────────
     if (stage.type === "clone-done" || stage.type === "clone-error") {
       if (key.return || key.escape) {
         if (stage.type === "clone-done") {
           const repoName = stage.repoUrl.split("/").pop() ?? "repo";
-          // Add a plain assistant message summarising the clone — no model call,
-          // no auto-reading. The user can ask follow-up questions themselves.
+
           const summaryMsg: Message = {
             role: "assistant",
             type: "text",
             content: `Cloned **${repoName}** (${stage.fileCount} files) to \`${stage.destPath}\`.\n\nAsk me anything about it — I can read files, explain how it works, or suggest improvements.`,
           };
-          // Also inject a silent context message so the model knows the path
-          // when the user asks a follow-up question.
+
           const contextMsg: Message = {
             role: "assistant",
             type: "tool",
@@ -479,10 +453,8 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── cloning — no input ─────────────────────────────────────────
     if (stage.type === "cloning") return;
 
-    // ── permission ─────────────────────────────────────────────────
     if (stage.type === "permission") {
       if (input === "y" || input === "Y" || key.return) {
         stage.resolve(true);
@@ -495,7 +467,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── preview ────────────────────────────────────────────────────
     if (stage.type === "preview") {
       if (key.upArrow) {
         setStage({
@@ -555,7 +526,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       }
     }
 
-    // ── viewing-file ───────────────────────────────────────────────
     if (stage.type === "viewing-file") {
       if (key.upArrow) {
         setStage({
@@ -574,8 +544,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       }
     }
   });
-
-  // ── Provider setup ──────────────────────────────────────────────────────────
 
   const handleProviderDone = (p: Provider) => {
     setProvider(p);
@@ -618,8 +586,6 @@ Ask me anything, tell me what to build, share a URL, or ask me to read/write fil
       .catch(() => setStage({ type: "idle" }));
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
-
   if (stage.type === "picking-provider")
     return <ProviderPicker onDone={handleProviderDone} />;
 
@@ -651,7 +617,6 @@ Ask me anything, tell me what to build, share a URL, or ask me to read/write fil
   if (stage.type === "viewing-file")
     return <ViewingFileView stage={stage} committed={committed} />;
 
-  // idle / thinking / permission
   return (
     <Box flexDirection="column">
       <Static items={committed}>

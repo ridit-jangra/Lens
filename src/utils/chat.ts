@@ -64,8 +64,24 @@ You have exactly six tools. To use a tool you MUST wrap it in the exact XML tags
 5. NEVER say "I'll fetch" / "run this command" / "here's the write-file" — just emit the tag
 6. NEVER use shell to run git clone — always use the clone tag instead
 7. write-file content field must be the COMPLETE file content, never empty or placeholder
-8. After a write-file succeeds, do NOT repeat it — trust the result
+8. After a write-file succeeds, do NOT repeat it — trust the result and move on
 9. After a write-file succeeds, use read-file to verify the content before telling the user it is done
+10. NEVER apologize and redo a tool call you already made — if write-file or shell ran and returned a result, it worked, do not run it again
+11. NEVER say "I made a mistake" and repeat the same tool — one attempt is enough, trust the output
+12. NEVER second-guess yourself mid-response — commit to your answer
+13. Every shell command runs from the repo root — \`cd\` has NO persistent effect. NEVER use \`cd\` alone. Use full paths or combine with && e.g. \`cd list && bun run index.ts\`
+14. write-file paths are relative to the repo root — if creating files in a subfolder write the full relative path e.g. \`list/src/index.tsx\` NOT \`src/index.tsx\`
+15. When scaffolding a new project in a subfolder, ALL write-file paths must start with that subfolder name e.g. \`list/package.json\`, \`list/src/index.tsx\`
+16. For JSX/TSX files always use \`.tsx\` extension and include \`/** @jsxImportSource react */\` or ensure tsconfig has jsx set — bun needs this to parse JSX
+
+## SCAFFOLDING A NEW PROJECT (follow this exactly)
+
+When the user asks to create a new CLI/app in a subfolder (e.g. "make a todo app called list"):
+1. Create all files first using write-file with paths like \`list/package.json\`, \`list/src/index.tsx\`
+2. Then run \`cd list && bun install\` (or npm/pnpm) in one shell command
+3. Then run the project with \`cd list && bun run index.ts\` or whatever the entry point is
+4. NEVER run \`bun init\` — it is interactive and will hang. Create package.json manually with write-file instead
+5. TSX files need either tsconfig.json with \`"jsx": "react-jsx"\` or \`/** @jsxImportSource react */\` at the top
 
 ## FETCH → WRITE FLOW (follow this exactly when saving fetched data)
 
@@ -398,11 +414,16 @@ export async function callChat(
     };
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60_000);
+
   const res = await fetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
+    signal: controller.signal,
   });
+  clearTimeout(timer);
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   const data = (await res.json()) as Record<string, unknown>;
 

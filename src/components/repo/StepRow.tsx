@@ -48,9 +48,7 @@ export const StepRow = ({ step }: { step: Step }) => {
           <Text color="white">{step.repoPath}</Text>
         </Box>
         <Box gap={1} marginLeft={2}>
-          <Text color="gray" dimColor>
-            y re-clone · n use existing
-          </Text>
+          <Text color="gray">y re-clone · n use existing</Text>
         </Box>
       </Box>
     );

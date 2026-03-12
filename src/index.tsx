@@ -1,3 +1,4 @@
+import React from "react";
 import { render } from "ink";
 import { Command } from "commander";
 import { RepoCommand } from "./commands/repo";
@@ -5,6 +6,7 @@ import { InitCommand } from "./commands/provider";
 import { ReviewCommand } from "./commands/review";
 import { TaskCommand } from "./commands/task";
 import { ChatCommand } from "./commands/chat";
+import { TimelineCommand } from "./commands/timeline";
 
 const program = new Command();
 
@@ -43,6 +45,16 @@ program
   .option("-p, --path <path>", "Path to the repo", ".")
   .action((opts: { path: string }) => {
     render(<ChatCommand path={opts.path} />);
+  });
+
+program
+  .command("timeline")
+  .description(
+    "Explore your code history — see commits, changes, and evolution",
+  )
+  .option("-p, --path <path>", "Path to the repo", ".")
+  .action((opts: { path: string }) => {
+    render(<TimelineCommand path={opts.path} />);
   });
 
 program.parse(process.argv);

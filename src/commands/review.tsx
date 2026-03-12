@@ -1,3 +1,4 @@
+import React from "react";
 import { Box, Text } from "ink";
 import figures from "figures";
 import { useEffect, useState } from "react";

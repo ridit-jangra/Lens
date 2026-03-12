@@ -10,10 +10,6 @@ import { FileReviewer } from "../components/repo/FileReviewer";
 import { RepoAnalysis } from "../components/repo/RepoAnalysis";
 import type { Step, ImportantFile } from "../types/repo";
 
-function flattenTree(files: string[]): string[] {
-  return files;
-}
-
 export const RepoCommand = ({ url }: { url: string }) => {
   const [steps, setSteps] = useState<Step[]>([
     { type: "cloning", status: "pending" },
