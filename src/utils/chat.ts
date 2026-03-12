@@ -22,7 +22,7 @@ export { buildSystemPrompt, FEW_SHOT_MESSAGES } from "../prompts";
 import type { Message } from "../types/chat";
 import type { Provider } from "../types/config";
 import { FEW_SHOT_MESSAGES } from "../prompts";
-import { registry } from "./tools/registry";
+import { registry } from "../utils/tools/registry";
 import type { FilePatch } from "../components/repo/DiffViewer";
 
 export type ParsedResponse =
