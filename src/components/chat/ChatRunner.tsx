@@ -17,20 +17,9 @@ import {
   extractGithubUrl,
   toCloneUrl,
   parseCloneTag,
-  runShell,
-  fetchUrl,
-  readFile,
-  readFolder,
-  grepFiles,
-  deleteFile,
-  deleteFolder,
-  openUrl,
-  generatePdf,
-  writeFile,
   buildSystemPrompt,
   parseResponse,
   callChat,
-  searchWeb,
 } from "../../utils/chat";
 import {
   saveChat,
@@ -66,6 +55,7 @@ import {
 } from "../../utils/memory";
 import { readLensFile } from "../../utils/lensfile";
 import { ReviewCommand } from "../../commands/review";
+import { registry } from "../../utils/tools/registry";
 
 const COMMANDS = [
   { cmd: "/timeline", desc: "browse commit history" },
@@ -94,8 +84,6 @@ function CommandPalette({
   recentChats: string[];
 }) {
   const q = query.toLowerCase();
-
-  // If typing "/chat load <something>", stay visible and filter chats
   const isChatLoad = q.startsWith("/chat load") || q.startsWith("/chat delete");
   const chatFilter = isChatLoad
     ? q.startsWith("/chat load")
@@ -105,13 +93,9 @@ function CommandPalette({
   const filteredChats = chatFilter
     ? recentChats.filter((n) => n.toLowerCase().includes(chatFilter))
     : recentChats;
-
   const matches = COMMANDS.filter((c) => c.cmd.startsWith(q));
-
-  // Keep palette open if we're in /chat load mode even after space
   if (!matches.length && !isChatLoad) return null;
   if (!matches.length && isChatLoad && filteredChats.length === 0) return null;
-
   return (
     <Box flexDirection="column" marginBottom={1} marginLeft={2}>
       {matches.map((c, i) => {
@@ -170,39 +154,28 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const toolResultCache = useRef<Map<string, string>>(new Map());
-  const inputBuffer = useRef("");
-  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // When the user approves a tool that has chained remainder calls, we
+  // automatically approve subsequent tools in the same chain so the user
+  // doesn't have to press y for every file in a 10-file scaffold.
+  // This ref is set to true on the first approval and cleared when the chain ends.
+  const batchApprovedRef = useRef(false);
+
   const thinkingPhrase = useThinkingPhrase(stage.type === "thinking");
 
-  // Load recent chats on mount
   React.useEffect(() => {
     const chats = listChats(repoPath);
     setRecentChats(chats.slice(0, 10).map((c) => c.name));
   }, [repoPath]);
 
-  // Auto-save whenever messages change
   React.useEffect(() => {
     if (chatNameRef.current && allMessages.length > 1) {
       saveChat(chatNameRef.current, repoPath, allMessages);
     }
   }, [allMessages]);
 
-  const flushBuffer = () => {
-    const buf = inputBuffer.current;
-    if (!buf) return;
-    inputBuffer.current = "";
-    setInputValue((v) => v + buf);
-  };
-
-  const scheduleFlush = () => {
-    if (flushTimer.current !== null) return;
-    flushTimer.current = setTimeout(() => {
-      flushTimer.current = null;
-      flushBuffer();
-    }, 16);
-  };
-
   const handleError = (currentAll: Message[]) => (err: unknown) => {
+    batchApprovedRef.current = false;
     if (err instanceof Error && err.name === "AbortError") {
       setStage({ type: "idle" });
       return;
@@ -223,11 +196,12 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     signal: AbortSignal,
   ) => {
     if (signal.aborted) {
+      batchApprovedRef.current = false;
       setStage({ type: "idle" });
       return;
     }
 
-    // Handle inline memory operations the model may emit
+    // Handle inline memory operations
     const memAddMatches = [
       ...raw.matchAll(/<memory-add>([\s\S]*?)<\/memory-add>/g),
     ];
@@ -242,7 +216,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       const id = match[1]!.trim();
       if (id) deleteMemory(id, repoPath);
     }
-    // Strip memory tags from raw before parsing
     const cleanRaw = raw
       .replace(/<memory-add>[\s\S]*?<\/memory-add>/g, "")
       .replace(/<memory-delete>[\s\S]*?<\/memory-delete>/g, "")
@@ -250,7 +223,10 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
 
     const parsed = parseResponse(cleanRaw);
 
+    // ── changes (diff preview UI) ──────────────────────────────────────────
+
     if (parsed.kind === "changes") {
+      batchApprovedRef.current = false;
       if (parsed.patches.length === 0) {
         const msg: Message = {
           role: "assistant",
@@ -283,251 +259,10 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    if (
-      parsed.kind === "shell" ||
-      parsed.kind === "fetch" ||
-      parsed.kind === "read-file" ||
-      parsed.kind === "read-folder" ||
-      parsed.kind === "grep" ||
-      parsed.kind === "write-file" ||
-      parsed.kind === "delete-file" ||
-      parsed.kind === "delete-folder" ||
-      parsed.kind === "open-url" ||
-      parsed.kind === "generate-pdf" ||
-      parsed.kind === "search"
-    ) {
-      let tool: Parameters<typeof PermissionPrompt>[0]["tool"];
-      if (parsed.kind === "shell") {
-        tool = { type: "shell", command: parsed.command };
-      } else if (parsed.kind === "fetch") {
-        tool = { type: "fetch", url: parsed.url };
-      } else if (parsed.kind === "read-file") {
-        tool = { type: "read-file", filePath: parsed.filePath };
-      } else if (parsed.kind === "read-folder") {
-        tool = { type: "read-folder", folderPath: parsed.folderPath };
-      } else if (parsed.kind === "grep") {
-        tool = { type: "grep", pattern: parsed.pattern, glob: parsed.glob };
-      } else if (parsed.kind === "delete-file") {
-        tool = { type: "delete-file", filePath: parsed.filePath };
-      } else if (parsed.kind === "delete-folder") {
-        tool = { type: "delete-folder", folderPath: parsed.folderPath };
-      } else if (parsed.kind === "open-url") {
-        tool = { type: "open-url", url: parsed.url };
-      } else if (parsed.kind === "generate-pdf") {
-        tool = {
-          type: "generate-pdf",
-          filePath: parsed.filePath,
-          content: parsed.pdfContent,
-        };
-      } else if (parsed.kind === "search") {
-        tool = { type: "search", query: parsed.query };
-      } else {
-        tool = {
-          type: "write-file",
-          filePath: parsed.filePath,
-          fileContent: parsed.fileContent,
-        };
-      }
-
-      if (parsed.content) {
-        const preambleMsg: Message = {
-          role: "assistant",
-          content: parsed.content,
-          type: "text",
-        };
-        setAllMessages([...currentAll, preambleMsg]);
-        setCommitted((prev) => [...prev, preambleMsg]);
-      }
-
-      const isSafeTool =
-        parsed.kind === "read-file" ||
-        parsed.kind === "read-folder" ||
-        parsed.kind === "grep" ||
-        parsed.kind === "fetch" ||
-        parsed.kind === "open-url" ||
-        parsed.kind === "search";
-
-      const executeAndContinue = async (approved: boolean) => {
-        let result = "(denied by user)";
-        if (approved) {
-          const cacheKey =
-            parsed.kind === "read-file"
-              ? `read-file:${parsed.filePath}`
-              : parsed.kind === "read-folder"
-                ? `read-folder:${parsed.folderPath}`
-                : parsed.kind === "grep"
-                  ? `grep:${parsed.pattern}:${parsed.glob}`
-                  : null;
-
-          if (cacheKey && toolResultCache.current.has(cacheKey)) {
-            result =
-              toolResultCache.current.get(cacheKey)! +
-              "\n\n[NOTE: This result was already retrieved earlier. Do not request it again.]";
-          } else {
-            try {
-              setStage({ type: "thinking" });
-              if (parsed.kind === "shell") {
-                result = await runShell(parsed.command, repoPath);
-              } else if (parsed.kind === "fetch") {
-                result = await fetchUrl(parsed.url);
-              } else if (parsed.kind === "read-file") {
-                result = readFile(parsed.filePath, repoPath);
-              } else if (parsed.kind === "read-folder") {
-                result = readFolder(parsed.folderPath, repoPath);
-              } else if (parsed.kind === "grep") {
-                result = grepFiles(parsed.pattern, parsed.glob, repoPath);
-              } else if (parsed.kind === "delete-file") {
-                result = deleteFile(parsed.filePath, repoPath);
-              } else if (parsed.kind === "delete-folder") {
-                result = deleteFolder(parsed.folderPath, repoPath);
-              } else if (parsed.kind === "open-url") {
-                result = openUrl(parsed.url);
-              } else if (parsed.kind === "generate-pdf") {
-                result = generatePdf(
-                  parsed.filePath,
-                  parsed.pdfContent,
-                  repoPath,
-                );
-              } else if (parsed.kind === "write-file") {
-                result = writeFile(
-                  parsed.filePath,
-                  parsed.fileContent,
-                  repoPath,
-                );
-              } else if (parsed.kind === "search") {
-                result = await searchWeb(parsed.query);
-              }
-              if (cacheKey) {
-                toolResultCache.current.set(cacheKey, result);
-              }
-            } catch (err: unknown) {
-              result = `Error: ${err instanceof Error ? err.message : "failed"}`;
-            }
-          }
-        }
-
-        if (approved && !result.startsWith("Error:")) {
-          const kindMap = {
-            shell: "shell-run",
-            fetch: "url-fetched",
-            "read-file": "file-read",
-            "read-folder": "file-read",
-            grep: "file-read",
-            "delete-file": "file-written",
-            "delete-folder": "file-written",
-            "open-url": "url-fetched",
-            "generate-pdf": "file-written",
-            "write-file": "file-written",
-            search: "url-fetched",
-          } as const;
-          appendMemory({
-            kind: kindMap[parsed.kind as keyof typeof kindMap] ?? "shell-run",
-            detail:
-              parsed.kind === "shell"
-                ? parsed.command
-                : parsed.kind === "fetch"
-                  ? parsed.url
-                  : parsed.kind === "search"
-                    ? parsed.query
-                    : parsed.kind === "read-folder"
-                      ? parsed.folderPath
-                      : parsed.kind === "grep"
-                        ? `${parsed.pattern} ${parsed.glob}`
-                        : parsed.kind === "delete-file"
-                          ? parsed.filePath
-                          : parsed.kind === "delete-folder"
-                            ? parsed.folderPath
-                            : parsed.kind === "open-url"
-                              ? parsed.url
-                              : parsed.kind === "generate-pdf"
-                                ? parsed.filePath
-                                : parsed.filePath,
-            summary: result.split("\n")[0]?.slice(0, 120) ?? "",
-            repoPath,
-          });
-        }
-
-        const toolName =
-          parsed.kind === "shell"
-            ? "shell"
-            : parsed.kind === "fetch"
-              ? "fetch"
-              : parsed.kind === "read-file"
-                ? "read-file"
-                : parsed.kind === "read-folder"
-                  ? "read-folder"
-                  : parsed.kind === "grep"
-                    ? "grep"
-                    : parsed.kind === "delete-file"
-                      ? "delete-file"
-                      : parsed.kind === "delete-folder"
-                        ? "delete-folder"
-                        : parsed.kind === "open-url"
-                          ? "open-url"
-                          : parsed.kind === "generate-pdf"
-                            ? "generate-pdf"
-                            : parsed.kind === "search"
-                              ? "search"
-                              : "write-file";
-
-        const toolContent =
-          parsed.kind === "shell"
-            ? parsed.command
-            : parsed.kind === "fetch"
-              ? parsed.url
-              : parsed.kind === "search"
-                ? parsed.query
-                : parsed.kind === "read-folder"
-                  ? parsed.folderPath
-                  : parsed.kind === "grep"
-                    ? `${parsed.pattern} — ${parsed.glob}`
-                    : parsed.kind === "delete-file"
-                      ? parsed.filePath
-                      : parsed.kind === "delete-folder"
-                        ? parsed.folderPath
-                        : parsed.kind === "open-url"
-                          ? parsed.url
-                          : parsed.kind === "generate-pdf"
-                            ? parsed.filePath
-                            : parsed.filePath;
-
-        const toolMsg: Message = {
-          role: "assistant",
-          type: "tool",
-          toolName,
-          content: toolContent,
-          result,
-          approved,
-        };
-
-        const withTool = [...currentAll, toolMsg];
-        setAllMessages(withTool);
-        setCommitted((prev) => [...prev, toolMsg]);
-
-        const nextAbort = new AbortController();
-        abortControllerRef.current = nextAbort;
-
-        setStage({ type: "thinking" });
-        callChat(provider!, systemPrompt, withTool, nextAbort.signal)
-          .then((r: string) => processResponse(r, withTool, nextAbort.signal))
-          .catch(handleError(withTool));
-      };
-
-      if (autoApprove && isSafeTool) {
-        executeAndContinue(true);
-        return;
-      }
-
-      setStage({
-        type: "permission",
-        tool,
-        pendingMessages: currentAll,
-        resolve: executeAndContinue,
-      });
-      return;
-    }
+    // ── clone (git clone UI flow) ──────────────────────────────────────────
 
     if (parsed.kind === "clone") {
+      batchApprovedRef.current = false;
       if (parsed.content) {
         const preambleMsg: Message = {
           role: "assistant",
@@ -545,29 +280,158 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    const msg: Message = {
-      role: "assistant",
-      content: parsed.content,
-      type: "text",
-    };
-    const withMsg = [...currentAll, msg];
-    setAllMessages(withMsg);
-    setCommitted((prev) => [...prev, msg]);
+    // ── text ──────────────────────────────────────────────────────────────
 
-    const lastUserMsg = [...currentAll]
-      .reverse()
-      .find((m) => m.role === "user");
-    const githubUrl = lastUserMsg
-      ? extractGithubUrl(lastUserMsg.content)
-      : null;
-
-    if (githubUrl && !clonedUrls.has(githubUrl)) {
-      setTimeout(() => {
-        setStage({ type: "clone-offer", repoUrl: githubUrl });
-      }, 80);
-    } else {
-      setStage({ type: "idle" });
+    if (parsed.kind === "text") {
+      batchApprovedRef.current = false;
+      const msg: Message = {
+        role: "assistant",
+        content: parsed.content,
+        type: "text",
+      };
+      const withMsg = [...currentAll, msg];
+      setAllMessages(withMsg);
+      setCommitted((prev) => [...prev, msg]);
+      const lastUserMsg = [...currentAll]
+        .reverse()
+        .find((m) => m.role === "user");
+      const githubUrl = lastUserMsg
+        ? extractGithubUrl(lastUserMsg.content)
+        : null;
+      if (githubUrl && !clonedUrls.has(githubUrl)) {
+        setTimeout(
+          () => setStage({ type: "clone-offer", repoUrl: githubUrl }),
+          80,
+        );
+      } else {
+        setStage({ type: "idle" });
+      }
+      return;
     }
+
+    // ── generic tool ──────────────────────────────────────────────────────
+
+    const tool = registry.get(parsed.toolName);
+    if (!tool) {
+      batchApprovedRef.current = false;
+      setStage({ type: "idle" });
+      return;
+    }
+
+    if (parsed.content) {
+      const preambleMsg: Message = {
+        role: "assistant",
+        content: parsed.content,
+        type: "text",
+      };
+      setAllMessages([...currentAll, preambleMsg]);
+      setCommitted((prev) => [...prev, preambleMsg]);
+    }
+
+    const remainder = parsed.remainder;
+    const isSafe = tool.safe ?? false;
+
+    const executeAndContinue = async (approved: boolean) => {
+      // If the user approved this tool and there are more in the chain,
+      // mark the batch as approved so subsequent tools skip the prompt.
+      if (approved && remainder) {
+        batchApprovedRef.current = true;
+      }
+
+      let result = "(denied by user)";
+
+      if (approved) {
+        const cacheKey = isSafe
+          ? `${parsed.toolName}:${parsed.rawInput}`
+          : null;
+        if (cacheKey && toolResultCache.current.has(cacheKey)) {
+          result =
+            toolResultCache.current.get(cacheKey)! +
+            "\n\n[NOTE: This result was already retrieved earlier. Do not request it again.]";
+        } else {
+          try {
+            setStage({ type: "thinking" });
+            const toolResult = await tool.execute(parsed.input, {
+              repoPath,
+              messages: currentAll,
+            });
+            result = toolResult.value;
+            if (cacheKey && toolResult.kind === "text") {
+              toolResultCache.current.set(cacheKey, result);
+            }
+          } catch (err: unknown) {
+            result = `Error: ${err instanceof Error ? err.message : "failed"}`;
+          }
+        }
+      }
+
+      if (approved && !result.startsWith("Error:")) {
+        appendMemory({
+          kind: "shell-run",
+          detail: tool.summariseInput
+            ? String(tool.summariseInput(parsed.input))
+            : parsed.rawInput,
+          summary: result.split("\n")[0]?.slice(0, 120) ?? "",
+          repoPath,
+        });
+      }
+
+      const displayContent = tool.summariseInput
+        ? String(tool.summariseInput(parsed.input))
+        : parsed.rawInput;
+
+      const toolMsg: Message = {
+        role: "assistant",
+        type: "tool",
+        toolName: parsed.toolName as any,
+        content: displayContent,
+        result,
+        approved,
+      };
+
+      const withTool = [...currentAll, toolMsg];
+      setAllMessages(withTool);
+      setCommitted((prev) => [...prev, toolMsg]);
+
+      // Chain: process remainder immediately, no API round-trip needed.
+      if (approved && remainder && remainder.length > 0) {
+        processResponse(remainder, withTool, signal);
+        return;
+      }
+
+      // Chain ended (or was never chained) — clear batch approval.
+      batchApprovedRef.current = false;
+
+      const nextAbort = new AbortController();
+      abortControllerRef.current = nextAbort;
+      setStage({ type: "thinking" });
+      callChat(provider!, systemPrompt, withTool, nextAbort.signal)
+        .then((r: string) => processResponse(r, withTool, nextAbort.signal))
+        .catch(handleError(withTool));
+    };
+
+    // Auto-approve if: tool is safe, or global auto-approve is on, or we're
+    // already inside a user-approved batch chain.
+    if ((autoApprove && isSafe) || batchApprovedRef.current) {
+      executeAndContinue(true);
+      return;
+    }
+
+    const permLabel = tool.permissionLabel ?? tool.name;
+    const permValue = tool.summariseInput
+      ? String(tool.summariseInput(parsed.input))
+      : parsed.rawInput;
+
+    setStage({
+      type: "permission",
+      tool: {
+        type: parsed.toolName as any,
+        _display: permValue,
+        _label: permLabel,
+      } as any,
+      pendingMessages: currentAll,
+      resolve: executeAndContinue,
+    });
   };
 
   const sendMessage = (text: string) => {
@@ -577,7 +441,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       setShowTimeline(true);
       return;
     }
-
     if (text.trim().toLowerCase() === "/review") {
       setShowReview(true);
       return;
@@ -589,7 +452,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       const msg: Message = {
         role: "assistant",
         content: next
-          ? "Auto-approve ON — read, search, grep and folder tools will run without asking. Write and code changes still require approval."
+          ? "Auto-approve ON — safe tools (read, search, fetch) will run without asking."
           : "Auto-approve OFF — all tools will ask for permission.",
         type: "text",
       };
@@ -600,17 +463,16 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
 
     if (text.trim().toLowerCase() === "/clear history") {
       clearRepoMemory(repoPath);
-      const clearedMsg: Message = {
+      const msg: Message = {
         role: "assistant",
         content: "History cleared for this repo.",
         type: "text",
       };
-      setCommitted((prev) => [...prev, clearedMsg]);
-      setAllMessages((prev) => [...prev, clearedMsg]);
+      setCommitted((prev) => [...prev, msg]);
+      setAllMessages((prev) => [...prev, msg]);
       return;
     }
 
-    // bare /chat — show usage
     if (text.trim().toLowerCase() === "/chat") {
       const msg: Message = {
         role: "assistant",
@@ -623,7 +485,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // /chat rename <newname>
     if (text.trim().toLowerCase().startsWith("/chat rename")) {
       const parts = text.trim().split(/\s+/);
       const newName = parts.slice(2).join("-");
@@ -657,14 +518,13 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // /chat delete <name>
     if (text.trim().toLowerCase().startsWith("/chat delete")) {
       const parts = text.trim().split(/\s+/);
       const name = parts.slice(2).join("-");
       if (!name) {
         const msg: Message = {
           role: "assistant",
-          content: "Usage: `/chat delete <name>`",
+          content: "Usage: `/chat delete <n>`",
           type: "text",
         };
         setCommitted((prev) => [...prev, msg]);
@@ -682,7 +542,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         setAllMessages((prev) => [...prev, msg]);
         return;
       }
-      // If deleting the current chat, clear the name so it gets re-named on next message
       if (chatNameRef.current === name) {
         chatNameRef.current = null;
         setChatName(null);
@@ -698,7 +557,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // /chat list
     if (text.trim().toLowerCase() === "/chat list") {
       const chats = listChats(repoPath);
       const content =
@@ -716,7 +574,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // /chat load <n>
     if (text.trim().toLowerCase().startsWith("/chat load")) {
       const parts = text.trim().split(/\s+/);
       const name = parts.slice(2).join("-");
@@ -758,7 +615,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // /memory list
     if (
       text.trim().toLowerCase() === "/memory list" ||
       text.trim().toLowerCase() === "/memory"
@@ -767,14 +623,15 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       const content =
         mems.length === 0
           ? "No memories stored for this repo yet."
-          : `Memories for this repo:\n\n${mems.map((m) => `- [${m.id}] ${m.content}`).join("\n")}`;
+          : `Memories for this repo:\n\n${mems
+              .map((m) => `- [${m.id}] ${m.content}`)
+              .join("\n")}`;
       const msg: Message = { role: "assistant", content, type: "text" };
       setCommitted((prev) => [...prev, msg]);
       setAllMessages((prev) => [...prev, msg]);
       return;
     }
 
-    // /memory add <content>
     if (text.trim().toLowerCase().startsWith("/memory add")) {
       const content = text.trim().slice("/memory add".length).trim();
       if (!content) {
@@ -798,7 +655,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // /memory delete <id>
     if (text.trim().toLowerCase().startsWith("/memory delete")) {
       const id = text.trim().split(/\s+/)[2];
       if (!id) {
@@ -824,7 +680,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // /memory clear
     if (text.trim().toLowerCase() === "/memory clear") {
       clearRepoMemory(repoPath);
       const msg: Message = {
@@ -842,15 +697,14 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     setCommitted((prev) => [...prev, userMsg]);
     setAllMessages(nextAll);
     toolResultCache.current.clear();
+    batchApprovedRef.current = false;
 
-    // Track input history for up/down navigation
     inputHistoryRef.current = [
       text,
       ...inputHistoryRef.current.filter((m) => m !== text),
     ].slice(0, 50);
     historyIndexRef.current = -1;
 
-    // Auto-name chat on first user message
     if (!chatName) {
       const name =
         getChatNameSuggestions(nextAll)[0] ??
@@ -877,6 +731,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     if (stage.type === "thinking" && key.escape) {
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
+      batchApprovedRef.current = false;
       setStage({ type: "idle" });
       return;
     }
@@ -886,7 +741,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         process.exit(0);
         return;
       }
-
       if (key.upArrow && inputHistoryRef.current.length > 0) {
         const next = Math.min(
           historyIndexRef.current + 1,
@@ -897,16 +751,13 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         setInputKey((k) => k + 1);
         return;
       }
-
       if (key.downArrow) {
         const next = historyIndexRef.current - 1;
         historyIndexRef.current = next;
-        const val = next < 0 ? "" : inputHistoryRef.current[next]!;
-        setInputValue(val);
+        setInputValue(next < 0 ? "" : inputHistoryRef.current[next]!);
         setInputKey((k) => k + 1);
         return;
       }
-
       if (key.tab && inputValue.startsWith("/")) {
         const q = inputValue.toLowerCase();
         const match = COMMANDS.find((c) => c.cmd.startsWith(q));
@@ -971,37 +822,36 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     if (stage.type === "clone-exists") {
       if (input === "y" || input === "Y") {
         const { repoUrl, repoPath: existingPath } = stage;
-        const cloneUrl = toCloneUrl(repoUrl);
         setStage({ type: "cloning", repoUrl });
-        startCloneRepo(cloneUrl, { forceReclone: true }).then((result) => {
-          if (result.done) {
-            const fileCount = walkDir(existingPath).length;
-            setStage({
-              type: "clone-done",
-              repoUrl,
-              destPath: existingPath,
-              fileCount,
-            });
-          } else {
-            setStage({
-              type: "clone-error",
-              message:
-                !result.folderExists && result.error
-                  ? result.error
-                  : "Clone failed",
-            });
-          }
-        });
+        startCloneRepo(toCloneUrl(repoUrl), { forceReclone: true }).then(
+          (result) => {
+            if (result.done) {
+              setStage({
+                type: "clone-done",
+                repoUrl,
+                destPath: existingPath,
+                fileCount: walkDir(existingPath).length,
+              });
+            } else {
+              setStage({
+                type: "clone-error",
+                message:
+                  !result.folderExists && result.error
+                    ? result.error
+                    : "Clone failed",
+              });
+            }
+          },
+        );
         return;
       }
       if (input === "n" || input === "N") {
         const { repoUrl, repoPath: existingPath } = stage;
-        const fileCount = walkDir(existingPath).length;
         setStage({
           type: "clone-done",
           repoUrl,
           destPath: existingPath,
-          fileCount,
+          fileCount: walkDir(existingPath).length,
         });
         return;
       }
@@ -1022,7 +872,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             type: "tool",
             toolName: "fetch",
             content: stage.repoUrl,
-            result: `Clone complete. Repo: ${repoName}. Local path: ${stage.destPath}. ${stage.fileCount} files. Use read-file with full path e.g. read-file ${stage.destPath}/README.md`,
+            result: `Clone complete. Repo: ${repoName}. Local path: ${stage.destPath}. ${stage.fileCount} files.`,
             approved: true,
           };
           const withClone = [...allMessages, contextMsg, summaryMsg];
@@ -1044,6 +894,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         return;
       }
       if (input === "n" || input === "N" || key.escape) {
+        batchApprovedRef.current = false;
         stage.resolve(false);
         return;
       }
@@ -1138,26 +989,16 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         const historySummary = buildMemorySummary(repoPath);
         const lensFile = readLensFile(repoPath);
         const lensContext = lensFile
-          ? `
-
-## LENS.md (previous analysis)
-${lensFile.overview}
-
-Important folders: ${lensFile.importantFolders.join(", ")}
-Suggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
+          ? `\n\n## LENS.md (previous analysis)\n${lensFile.overview}\n\nImportant folders: ${lensFile.importantFolders.join(", ")}\nSuggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
           : "";
+        const toolsSection = registry.buildSystemPromptSection();
         setSystemPrompt(
-          buildSystemPrompt(importantFiles, historySummary) + lensContext,
+          buildSystemPrompt(importantFiles, historySummary, toolsSection) +
+            lensContext,
         );
-        const historyNote = historySummary
-          ? "\n\nI have memory of previous actions in this repo."
-          : "";
-        const lensGreetNote = lensFile
-          ? "\n\nFound LENS.md — I have context from a previous analysis of this repo."
-          : "";
         const greeting: Message = {
           role: "assistant",
-          content: `Welcome to Lens \nCodebase loaded — ${importantFiles.length} files indexed.${historyNote}${lensGreetNote}\nAsk me anything, tell me what to build, share a URL, or ask me to read/write files.\n\nTip: type /timeline to browse commit history.`,
+          content: `Welcome to Lens\nCodebase loaded — ${importantFiles.length} files indexed.${historySummary ? "\n\nI have memory of previous actions in this repo." : ""}${lensFile ? "\n\nFound LENS.md — I have context from a previous analysis of this repo." : ""}\nAsk me anything, tell me what to build, share a URL, or ask me to read/write files.\n\nTip: type /timeline to browse commit history.`,
           type: "text",
         };
         setCommitted([greeting]);
@@ -1169,8 +1010,7 @@ Suggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
 
   if (stage.type === "picking-provider")
     return <ProviderPicker onDone={handleProviderDone} />;
-
-  if (stage.type === "loading") {
+  if (stage.type === "loading")
     return (
       <Box gap={1} marginTop={1}>
         <Text color={ACCENT}>*</Text>
@@ -1182,23 +1022,17 @@ Suggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
         </Text>
       </Box>
     );
-  }
-
-  if (showTimeline) {
+  if (showTimeline)
     return (
       <TimelineRunner
         repoPath={repoPath}
         onExit={() => setShowTimeline(false)}
       />
     );
-  }
-
-  if (showReview) {
+  if (showReview)
     return (
       <ReviewCommand path={repoPath} onExit={() => setShowReview(false)} />
     );
-  }
-
   if (stage.type === "clone-offer")
     return <CloneOfferView stage={stage} committed={committed} />;
   if (stage.type === "cloning")

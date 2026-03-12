@@ -1,8 +1,7 @@
 import React from "react";
-import { Box, Text, Static } from "ink";
+import { Box, Static, Text } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
-import figures from "figures";
 import { ACCENT } from "../../colors";
 import { DiffViewer } from "../repo/DiffViewer";
 import { StaticMessage } from "./ChatMessage";
@@ -25,61 +24,89 @@ function Hint({ text }: { text: string }) {
   );
 }
 
+// ── PermissionPrompt ──────────────────────────────────────────────────────────
+//
+// Works with both the old explicit ToolCall union and the new generic
+// { type, _label, _display } shape produced by the plugin system.
+
 export function PermissionPrompt({
   tool,
   onDecide,
 }: {
-  tool: ToolCall;
+  tool: ToolCall | { type: string; _label: string; _display: string };
   onDecide: (approved: boolean) => void;
 }) {
   let icon: string;
   let label: string;
   let value: string;
 
-  if (tool.type === "shell") {
-    icon = "$";
-    label = "run";
-    value = tool.command;
-  } else if (tool.type === "fetch") {
-    icon = "~>";
-    label = "fetch";
-    value = tool.url;
-  } else if (tool.type === "read-file") {
-    icon = "r";
-    label = "read";
-    value = tool.filePath;
-  } else if (tool.type === "read-folder") {
-    icon = "d";
-    label = "folder";
-    value = tool.folderPath;
-  } else if (tool.type === "grep") {
-    icon = "/";
-    label = "grep";
-    value = `${tool.pattern}  ${tool.glob}`;
-  } else if (tool.type === "delete-file") {
-    icon = "x";
-    label = "delete";
-    value = tool.filePath;
-  } else if (tool.type === "delete-folder") {
-    icon = "X";
-    label = "delete folder";
-    value = tool.folderPath;
-  } else if (tool.type === "open-url") {
-    icon = "↗";
-    label = "open";
-    value = tool.url;
-  } else if (tool.type === "generate-pdf") {
-    icon = "P";
-    label = "pdf";
-    value = tool.filePath;
-  } else if (tool.type === "write-file") {
-    icon = "w";
-    label = "write";
-    value = `${tool.filePath} (${tool.fileContent.length} bytes)`;
+  // Generic plugin tool shape
+  if ("_label" in tool) {
+    const iconMap: Record<string, string> = {
+      run: "$",
+      fetch: "~>",
+      read: "r",
+      write: "w",
+      delete: "x",
+      "delete folder": "X",
+      open: "↗",
+      pdf: "P",
+      search: "?",
+      folder: "d",
+      grep: "/",
+      clone: "↓",
+      query: "⌗",
+    };
+    icon = iconMap[tool._label] ?? "·";
+    label = tool._label;
+    value = tool._display;
   } else {
-    icon = "?";
-    label = "search";
-    value = tool.query;
+    // Legacy explicit ToolCall union
+    if (tool.type === "shell") {
+      icon = "$";
+      label = "run";
+      value = tool.command;
+    } else if (tool.type === "fetch") {
+      icon = "~>";
+      label = "fetch";
+      value = tool.url;
+    } else if (tool.type === "read-file") {
+      icon = "r";
+      label = "read";
+      value = tool.filePath;
+    } else if (tool.type === "read-folder") {
+      icon = "d";
+      label = "folder";
+      value = tool.folderPath;
+    } else if (tool.type === "grep") {
+      icon = "/";
+      label = "grep";
+      value = `${tool.pattern}  ${tool.glob}`;
+    } else if (tool.type === "delete-file") {
+      icon = "x";
+      label = "delete";
+      value = tool.filePath;
+    } else if (tool.type === "delete-folder") {
+      icon = "X";
+      label = "delete folder";
+      value = tool.folderPath;
+    } else if (tool.type === "open-url") {
+      icon = "↗";
+      label = "open";
+      value = tool.url;
+    } else if (tool.type === "generate-pdf") {
+      icon = "P";
+      label = "pdf";
+      value = tool.filePath;
+    } else if (tool.type === "write-file") {
+      icon = "w";
+      label = "write";
+      value = `${tool.filePath} (${tool.fileContent.length} bytes)`;
+    } else {
+      icon = "?";
+      label = "search";
+      value = (tool as any).query ?? "";
+    }
   }
 
   return (
