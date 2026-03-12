@@ -14,6 +14,7 @@ import type { Provider } from "../../types/config";
 import type { ImportantFile } from "../../types/repo";
 import { fetchFileTree, readImportantFiles } from "../../utils/files";
 import { readFileSync, readdirSync, statSync } from "fs";
+import { useThinkingPhrase } from "../../utils/thinking";
 
 type Stage =
   | { type: "picking-provider" }
@@ -80,6 +81,19 @@ Rules:
 - Keep changes focused on fulfilling the request
 - Do not change unrelated code
 - If the request is impossible or unclear, return an empty patches array with an explanation in summary`;
+}
+
+function ThinkingAboutStep({ prompt }: { prompt: string }) {
+  const phrase = useThinkingPhrase(true, "task");
+  return (
+    <Box gap={1}>
+      <Text color={ACCENT}>
+        <Spinner />
+      </Text>
+      <Text color={ACCENT}>{phrase}</Text>
+      <Text color="gray">"{prompt}"</Text>
+    </Box>
+  );
 }
 
 function applyPatches(repoPath: string, plan: PromptPlan): AppliedFile[] {
@@ -266,14 +280,7 @@ export const PromptRunner = ({
   if (stage.type === "thinking") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
-        <Box gap={1}>
-          <Text color={ACCENT}>
-            <Spinner />
-          </Text>
-          <Text>
-            Thinking about: <Text color="cyan">"{userPrompt}"</Text>
-          </Text>
-        </Box>
+        <ThinkingAboutStep prompt={userPrompt} />
         {files.length > 0 && (
           <Box flexDirection="column" marginLeft={2}>
             <Text color="gray">Using {files.length} files as context</Text>
