@@ -89,12 +89,14 @@ export const RepoAnalysis = ({
   fileTree,
   files: initialFiles,
   preloadedResult,
+  onExit,
 }: {
   repoUrl: string;
   repoPath: string;
   fileTree: string[];
   files: ImportantFile[];
   preloadedResult?: AnalysisResult;
+  onExit?: () => void;
 }) => {
   const [stage, setStage] = useState<AnalysisStage>(
     preloadedResult
@@ -201,7 +203,12 @@ export const RepoAnalysis = ({
   }
 
   if (stage.type === "written") {
-    setTimeout(() => process.exit(0), 100);
+    setTimeout(() => {
+      if (onExit) onExit();
+      else {
+        process.exit(0);
+      }
+    }, 100);
     return (
       <Text color="green">
         {figures.tick}{" "}
@@ -216,7 +223,17 @@ export const RepoAnalysis = ({
         <Text color="cyan" bold>
           {figures.play} Preview — {repoPath}
         </Text>
-        <PreviewRunner repoPath={repoPath} onExit={() => process.exit(0)} />
+        <PreviewRunner
+          repoPath={repoPath}
+          onExit={() => {
+            setTimeout(() => {
+              if (onExit) onExit();
+              else {
+                process.exit(0);
+              }
+            }, 100);
+          }}
+        />
       </Box>
     );
   }

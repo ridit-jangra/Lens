@@ -16,12 +16,15 @@ import type { Provider } from "../../types/config";
 const ACCENT = "#FF8C00";
 const W = () => process.stdout.columns ?? 100;
 
+// ── git tool helpers ──────────────────────────────────────────────────────────
+
 function gitRun(cmd: string, cwd: string): { ok: boolean; out: string } {
   try {
     const out = execSync(cmd, {
       cwd,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
+      timeout: 60_000,
     }).trim();
     return { ok: true, out: out || "(done)" };
   } catch (e: any) {
@@ -32,6 +35,7 @@ function gitRun(cmd: string, cwd: string): { ok: boolean; out: string } {
 }
 
 function getUnstagedDiff(cwd: string): string {
+  // includes both tracked changes and new untracked files
   const tracked = gitRun("git diff HEAD", cwd).out;
   const untracked = gitRun(`git ls-files --others --exclude-standard`, cwd).out;
 
@@ -85,6 +89,8 @@ Rules:
   return typeof raw === "string" ? raw.trim() : "update files";
 }
 
+// ── tiny helpers ──────────────────────────────────────────────────────────────
+
 function shortDate(d: string) {
   try {
     return new Date(d).toLocaleDateString("en-US", {
@@ -108,6 +114,8 @@ function bar(ins: number, del: number): string {
   const addW = Math.round((ins / total) * w);
   return "+" + "█".repeat(addW) + "░".repeat(w - addW) + "-";
 }
+
+// ── CommitRow ─────────────────────────────────────────────────────────────────
 
 function CommitRow({
   commit,
@@ -241,6 +249,8 @@ function CommitRow({
   );
 }
 
+// ── DiffPanel ─────────────────────────────────────────────────────────────────
+
 function DiffPanel({
   files,
   scrollOffset,
@@ -357,6 +367,8 @@ function DiffPanel({
   );
 }
 
+// ── RevertConfirm overlay ─────────────────────────────────────────────────────
+
 function RevertConfirm({
   commit,
   repoPath,
@@ -375,7 +387,7 @@ function RevertConfirm({
     if (status !== "confirm") return;
     if (input === "y" || input === "Y" || key.return) {
       setStatus("running");
-
+      // use revert (safe — creates a new commit, doesn't rewrite history)
       const r = gitRun(`git revert --no-edit "${commit.hash}"`, repoPath);
       setResult(r.out);
       setStatus("done");
@@ -443,6 +455,8 @@ function RevertConfirm({
   );
 }
 
+// ── CommitPanel — stage + commit unstaged changes ─────────────────────────────
+
 type CommitPanelState =
   | { phase: "scanning" }
   | { phase: "no-changes" }
@@ -464,6 +478,7 @@ function CommitPanel({
 }) {
   const [state, setState] = useState<CommitPanelState>({ phase: "scanning" });
 
+  // scan + generate on mount
   useEffect(() => {
     const diff = getUnstagedDiff(repoPath);
     if (!diff.trim() || diff === "(done)") {
@@ -488,6 +503,7 @@ function CommitPanel({
 
     if (state.phase === "review") {
       if (input === "y" || input === "Y" || key.return) {
+        // commit
         setState({ phase: "committing", message: state.message });
         const add = gitRun("git add -A", repoPath);
         if (!add.ok) {
@@ -523,6 +539,7 @@ function CommitPanel({
       if (key.escape) {
         setState({ phase: "review", diff: state.diff, message: state.message });
       }
+      // TextInput handles the rest
     }
 
     if (state.phase === "done" || state.phase === "error") {
@@ -577,6 +594,7 @@ function CommitPanel({
 
       {(state.phase === "review" || state.phase === "editing") && (
         <Box paddingX={1} flexDirection="column" gap={1}>
+          {/* show a compact diff summary */}
           <Box gap={1}>
             <Text color="gray" dimColor>
               diff preview:
@@ -661,6 +679,11 @@ function CommitPanel({
   );
 }
 
+// ── AskPanel ──────────────────────────────────────────────────────────────────
+// No Static here — Static always floats to the top of Ink output regardless of
+// where it is placed in the tree. We use plain state arrays instead so messages
+// render in document flow, below the commit list.
+
 type ChatMsg =
   | { role: "user"; content: string }
   | { role: "assistant"; content: string }
@@ -682,11 +705,12 @@ function AskPanel({
     { role: "user" | "assistant"; content: string; type: "text" }[]
   >([]);
 
+  // keywords that mean "commit my changes" in any language
   const COMMIT_TRIGGERS = [
     /commit/i,
     /stage/i,
     /push changes/i,
-
+    // hinglish / hindi
     /commit kr/i,
     /commit kar/i,
     /changes commit/i,
@@ -706,6 +730,7 @@ ${summarizeTimeline(commits)}`;
   const ask = async (q: string) => {
     if (!q.trim() || thinking) return;
 
+    // client-side check first — catch obvious commit intents without an API call
     if (COMMIT_TRIGGERS.some((re) => re.test(q))) {
       setMessages((prev) => [...prev, { role: "user", content: q }]);
       setInput("");
@@ -728,6 +753,7 @@ ${summarizeTimeline(commits)}`;
       const raw = await callChat(provider, systemPrompt, nextHistory as any);
       const answer = typeof raw === "string" ? raw.trim() : "(no response)";
 
+      // model-side delegation signal
       if (
         answer === "DELEGATE_COMMIT" ||
         answer.startsWith("DELEGATE_COMMIT")
@@ -738,6 +764,7 @@ ${summarizeTimeline(commits)}`;
         return;
       }
 
+      // strip any accidental markdown/code blocks the model snuck in
       const clean = answer
         .replace(/```[\s\S]*?```/g, "")
         .replace(/`([^`]+)`/g, "$1")
@@ -770,6 +797,7 @@ ${summarizeTimeline(commits)}`;
         {"─".repeat(w)}
       </Text>
 
+      {/* plain array render — stays in document flow below the commit list */}
       {messages.map((msg, i) => {
         if (msg.role === "thinking")
           return (
@@ -797,6 +825,7 @@ ${summarizeTimeline(commits)}`;
         );
       })}
 
+      {/* input always at the bottom of the panel */}
       <Box paddingX={1} gap={1}>
         <Text color={ACCENT}>{"?"}</Text>
         {!thinking ? (
@@ -816,6 +845,8 @@ ${summarizeTimeline(commits)}`;
   );
 }
 
+// ── TimelineRunner ────────────────────────────────────────────────────────────
+
 type UIMode =
   | { type: "browse" }
   | { type: "search"; query: string }
@@ -826,7 +857,13 @@ type UIMode =
 type StatusMsg = { id: number; text: string; ok: boolean };
 let sid = 0;
 
-export function TimelineRunner({ repoPath }: { repoPath: string }) {
+export function TimelineRunner({
+  repoPath,
+  onExit,
+}: {
+  repoPath: string;
+  onExit?: () => void;
+}) {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [commits, setCommits] = useState<Commit[]>([]);
   const [filtered, setFiltered] = useState<Commit[]>([]);
@@ -922,8 +959,12 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
   }, [showDiff]);
 
   useInput((input, key) => {
-    if (key.ctrl && input === "c") process.exit(0);
+    if (key.ctrl && input === "c") {
+      if (onExit) onExit();
+      else process.exit(0);
+    }
 
+    // overlays consume all input except ctrl+c
     if (
       mode.type === "ask" ||
       mode.type === "revert" ||
@@ -938,6 +979,7 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
       return;
     }
 
+    // diff open
     if (showDiff) {
       if (key.escape || input === "d") {
         setShowDiff(false);
@@ -960,6 +1002,10 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
 
     if (key.escape) {
       setShowDiff(false);
+      return;
+    }
+    if ((input === "q" || input === "Q") && onExit) {
+      onExit();
       return;
     }
     if (input === "/") {
@@ -1035,10 +1081,11 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
         ? "type question · enter send · esc close"
         : isReverting || isCommitting
           ? "see prompt above · esc cancel"
-          : "↑↓ navigate · enter diff · x revert · c commit · / search · ? ask · ^C exit";
+          : `↑↓ navigate · enter diff · x revert · c commit · / search · ? ask${onExit ? " · q back" : " · ^C exit"}`;
 
   return (
     <Box flexDirection="column">
+      {/* header */}
       <Box gap={2} marginBottom={1}>
         <Text color={ACCENT} bold>
           ◈ TIMELINE
@@ -1054,6 +1101,7 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
         )}
       </Box>
 
+      {/* status messages (Static — no re-render) */}
       <Static items={statusMsgs}>
         {(msg) => (
           <Box key={msg.id} paddingX={1} gap={1}>
@@ -1063,6 +1111,7 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
         )}
       </Static>
 
+      {/* search bar */}
       {isSearching && (
         <Box gap={1} marginBottom={1}>
           <Text color={ACCENT}>{"/"}</Text>
@@ -1075,6 +1124,7 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
         </Box>
       )}
 
+      {/* commit list */}
       {visible.map((commit, i) => {
         const absIdx = scrollOffset + i;
         const isSel = absIdx === selectedIdx;
@@ -1107,6 +1157,7 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
         </Box>
       )}
 
+      {/* revert overlay */}
       {isReverting && mode.type === "revert" && (
         <RevertConfirm
           commit={mode.commit}
@@ -1121,6 +1172,7 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
         />
       )}
 
+      {/* commit overlay */}
       {isCommitting && provider && (
         <CommitPanel
           repoPath={repoPath}
@@ -1135,6 +1187,7 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
         />
       )}
 
+      {/* ask panel */}
       {isAsking && provider && (
         <AskPanel
           commits={commits}
@@ -1145,6 +1198,7 @@ export function TimelineRunner({ repoPath }: { repoPath: string }) {
         />
       )}
 
+      {/* shortcut bar */}
       <Box marginTop={1}>
         <Text color="gray" dimColor>
           {shortcutHint}

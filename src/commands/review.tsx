@@ -162,7 +162,13 @@ function StatsPanel({
   );
 }
 
-export const ReviewCommand = ({ path: inputPath }: { path: string }) => {
+export const ReviewCommand = ({
+  path: inputPath,
+  onExit,
+}: {
+  path: string;
+  onExit?: () => void;
+}) => {
   const [stage, setStage] = useState<ReviewStage>({ type: "scanning" });
 
   const [preloadedResult, setPreloadedResult] = useState<
@@ -281,6 +287,7 @@ export const ReviewCommand = ({ path: inputPath }: { path: string }) => {
         fileTree={fileTree}
         files={files}
         preloadedResult={preloadedResult ?? undefined}
+        onExit={onExit}
       />
     </Box>
   );

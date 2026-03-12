@@ -526,14 +526,49 @@ export function applyPatches(repoPath: string, patches: FilePatch[]): void {
 // ── Tool execution ────────────────────────────────────────────────────────────
 
 export async function runShell(command: string, cwd: string): Promise<string> {
-  try {
-    const out = execSync(command, { cwd, timeout: 15000, encoding: "utf-8" });
-    return out.trim() || "(no output)";
-  } catch (err: unknown) {
-    const e = err as { stdout?: string; stderr?: string; message?: string };
-    const combined = [e.stdout, e.stderr].filter(Boolean).join("\n").trim();
-    return combined || e.message || "Command failed";
-  }
+  return new Promise((resolve) => {
+    // Use spawn so we can stream stdout+stderr and impose no hard cap on
+    // long-running commands (pip install, python scripts, git commit, etc.)
+    // We still cap at 5 minutes to avoid hanging forever.
+    const { spawn } =
+      require("child_process") as typeof import("child_process");
+    const isWin = process.platform === "win32";
+    const shell = isWin ? "cmd.exe" : "/bin/sh";
+    const shellFlag = isWin ? "/c" : "-c";
+
+    const proc = spawn(shell, [shellFlag, command], {
+      cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    const chunks: Buffer[] = [];
+    const errChunks: Buffer[] = [];
+
+    proc.stdout.on("data", (d: Buffer) => chunks.push(d));
+    proc.stderr.on("data", (d: Buffer) => errChunks.push(d));
+
+    const killTimer = setTimeout(
+      () => {
+        proc.kill();
+        resolve("(command timed out after 5 minutes)");
+      },
+      5 * 60 * 1000,
+    );
+
+    proc.on("close", (code: number | null) => {
+      clearTimeout(killTimer);
+      const stdout = Buffer.concat(chunks).toString("utf-8").trim();
+      const stderr = Buffer.concat(errChunks).toString("utf-8").trim();
+      const combined = [stdout, stderr].filter(Boolean).join("\n");
+      resolve(combined || (code === 0 ? "(no output)" : `exit code ${code}`));
+    });
+
+    proc.on("error", (err: Error) => {
+      clearTimeout(killTimer);
+      resolve(`Error: ${err.message}`);
+    });
+  });
 }
 
 // ── HTML table / list extractor ───────────────────────────────────────────────
@@ -759,9 +794,6 @@ export async function searchWeb(query: string): Promise<string> {
 // ── File tools ────────────────────────────────────────────────────────────────
 
 export function readFile(filePath: string, repoPath: string): string {
-  // If absolute path given, use it directly
-  // If relative, try: as-is, then under repoPath
-  // Do NOT silently fall back to a different repo — require the model to use full paths
   const candidates = path.isAbsolute(filePath)
     ? [filePath]
     : [filePath, path.join(repoPath, filePath)];
