@@ -1,5 +1,5 @@
 import React from "react";
-import { registry } from "./utils/tools/registry";
+import "./utils/tools/registry";
 import { render } from "ink";
 import { Command } from "commander";
 import { RepoCommand } from "./commands/repo";
@@ -13,8 +13,6 @@ import { loadAddons } from "./utils/addons/loadAddons";
 
 registerBuiltins();
 await loadAddons();
-
-console.log(registry.names());
 
 const program = new Command();
 

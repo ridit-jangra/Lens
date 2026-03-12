@@ -15,14 +15,12 @@ export type MemoryEntry = {
   detail: string;
   summary: string;
   timestamp: string;
-  repoPath: string;
 };
 
 export type Memory = {
   id: string;
   content: string;
   timestamp: string;
-  repoPath: string;
 };
 
 export type MemoryFile = {
@@ -64,9 +62,9 @@ export function appendMemory(entry: Omit<MemoryEntry, "timestamp">): void {
 
 export function buildMemorySummary(repoPath: string): string {
   const m = loadMemoryFile();
-  const relevant = m.entries.filter((e) => e.repoPath === repoPath).slice(-50);
+  const relevant = m.entries.slice(-50);
 
-  const memories = m.memories.filter((mem) => mem.repoPath === repoPath);
+  const memories = m.memories;
 
   const parts: string[] = [];
 
@@ -92,13 +90,13 @@ export function buildMemorySummary(repoPath: string): string {
 }
 
 export function getRepoMemory(repoPath: string): MemoryEntry[] {
-  return loadMemoryFile().entries.filter((e) => e.repoPath === repoPath);
+  return loadMemoryFile().entries;
 }
 
 export function clearRepoMemory(repoPath: string): void {
   const m = loadMemoryFile();
-  m.entries = m.entries.filter((e) => e.repoPath !== repoPath);
-  m.memories = m.memories.filter((mem) => mem.repoPath !== repoPath);
+  m.entries = m.entries = [];
+  m.memories = m.memories = [];
   saveMemoryFile(m);
 }
 
@@ -114,7 +112,6 @@ export function addMemory(content: string, repoPath: string): Memory {
     id: generateId(),
     content,
     timestamp: new Date().toISOString(),
-    repoPath,
   };
   m.memories.push(memory);
   saveMemoryFile(m);
@@ -124,14 +121,12 @@ export function addMemory(content: string, repoPath: string): Memory {
 export function deleteMemory(id: string, repoPath: string): boolean {
   const m = loadMemoryFile();
   const before = m.memories.length;
-  m.memories = m.memories.filter(
-    (mem) => !(mem.id === id && mem.repoPath === repoPath),
-  );
+  m.memories = m.memories.filter((mem) => !(mem.id === id));
   if (m.memories.length === before) return false;
   saveMemoryFile(m);
   return true;
 }
 
 export function listMemories(repoPath: string): Memory[] {
-  return loadMemoryFile().memories.filter((mem) => mem.repoPath === repoPath);
+  return loadMemoryFile().memories;
 }
