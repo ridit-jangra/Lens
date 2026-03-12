@@ -7,6 +7,9 @@ import { ReviewCommand } from "./commands/review";
 import { TaskCommand } from "./commands/task";
 import { ChatCommand } from "./commands/chat";
 import { TimelineCommand } from "./commands/timeline";
+import { registerBuiltins } from "./utils/tools/builtins";
+
+registerBuiltins();
 
 const program = new Command();
 
