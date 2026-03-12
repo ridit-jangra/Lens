@@ -4,6 +4,7 @@
   "workspaces": {
     "": {
       "dependencies": {
+        "@ridit/lens-sdk": "0.1.4",
         "commander": "^14.0.3",
         "figures": "^6.1.0",
         "ink": "^6.8.0",
@@ -25,6 +26,8 @@
   },
   "packages": {
     "@alcalzone/ansi-tokenize": ["@alcalzone/ansi-tokenize@0.2.5", "", { "dependencies": { "ansi-styles": "^6.2.1", "is-fullwidth-code-point": "^5.0.0" } }, "sha512-3NX/MpTdroi0aKz134A6RC2Gb2iXVECN4QaAXnvCIxxIm3C3AVB1mkUe8NaaiyvOpDfsrqWhYtj+Q6a62RrTsw=="],
+
+    "@ridit/lens-sdk": ["@ridit/lens-sdk@0.1.4", "", {}, "sha512-cy6EQp0tTv1/41jn+kpR45sNwed5Cnuj9yu/dQyVkeUj4gFiXgaWDBYhi65jeKtowqiLEyl38pEtKxcsYtwhfg=="],
 
     "@types/bun": ["@types/bun@1.3.10", "", { "dependencies": { "bun-types": "1.3.10" } }, "sha512-0+rlrUrOrTSskibryHbvQkDOWRJwJZqZlxrUs1u4oOoTln8+WIXBPmAuCF35SWB2z4Zl3E84Nl/D0P7803nigQ=="],
 

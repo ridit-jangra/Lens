@@ -1,4 +1,4 @@
-import type { Tool, ToolContext, ToolResult } from "./registry";
+import type { Tool, ToolContext } from "@ridit/lens-sdk";
 import {
   fetchUrl,
   searchWeb,

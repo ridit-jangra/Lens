@@ -1,4 +1,5 @@
 import React from "react";
+import { registry } from "./utils/tools/registry";
 import { render } from "ink";
 import { Command } from "commander";
 import { RepoCommand } from "./commands/repo";
@@ -8,8 +9,12 @@ import { TaskCommand } from "./commands/task";
 import { ChatCommand } from "./commands/chat";
 import { TimelineCommand } from "./commands/timeline";
 import { registerBuiltins } from "./utils/tools/builtins";
+import { loadAddons } from "./utils/addons/loadAddons";
 
 registerBuiltins();
+await loadAddons();
+
+console.log(registry.names());
 
 const program = new Command();
 
