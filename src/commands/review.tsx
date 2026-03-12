@@ -163,7 +163,7 @@ function StatsPanel({
 
 export const ReviewCommand = ({ path: inputPath }: { path: string }) => {
   const [stage, setStage] = useState<ReviewStage>({ type: "scanning" });
-  // When a lens menu choice skips to fix-issues, we pass a pre-loaded result
+
   const [preloadedResult, setPreloadedResult] = useState<
     import("../types/repo").AnalysisResult | null
   >(null);
@@ -204,7 +204,6 @@ export const ReviewCommand = ({ path: inputPath }: { path: string }) => {
     const lf = readLensFile(resolvedPath);
 
     if (choice === "use-cached" && lf) {
-      // Show result directly without re-analyzing
       setPreloadedResult(lensFileToAnalysisResult(lf));
       setStage({ type: "stats", stats, files, fileTree });
       return;
@@ -222,7 +221,6 @@ export const ReviewCommand = ({ path: inputPath }: { path: string }) => {
       return;
     }
 
-    // re-analyze or preview — go straight to normal flow
     setStage({ type: "stats", stats, files, fileTree });
   };
 

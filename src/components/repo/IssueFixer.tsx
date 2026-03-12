@@ -198,7 +198,6 @@ export const IssueFixer = ({
   const totalOptions = fixableIssues.length + 1;
 
   useInput((_, key) => {
-    // ── picking-issue ──────────────────────────────────────────────
     if (stage.type === "picking-issue") {
       if (key.upArrow) setSelectedIndex((i) => Math.max(0, i - 1));
       if (key.downArrow)
@@ -275,7 +274,6 @@ export const IssueFixer = ({
       return;
     }
 
-    // ── preview ────────────────────────────────────────────────────
     if (stage.type === "preview") {
       if (key.escape) {
         setStage({ type: "picking-issue" });
@@ -307,7 +305,6 @@ export const IssueFixer = ({
       return;
     }
 
-    // ── done ───────────────────────────────────────────────────────
     if (stage.type === "done") {
       if (key.escape) {
         onDone();
@@ -335,7 +332,6 @@ export const IssueFixer = ({
       return;
     }
 
-    // ── fix-all-summary ────────────────────────────────────────────
     if (stage.type === "fix-all-summary") {
       if (key.escape) {
         onDone();
@@ -370,7 +366,6 @@ export const IssueFixer = ({
       return;
     }
 
-    // ── viewing-file ───────────────────────────────────────────────
     if (stage.type === "viewing-file") {
       if (key.upArrow)
         setStage({
@@ -395,13 +390,11 @@ export const IssueFixer = ({
       return;
     }
 
-    // ── error ──────────────────────────────────────────────────────
     if (stage.type === "error") {
       if (key.return || key.escape) onDone();
     }
   });
 
-  // ── picking-issue render ───────────────────────────────────────
   if (stage.type === "picking-issue") {
     const allDone = fixableIssues.length === 0;
     return (
@@ -475,7 +468,6 @@ export const IssueFixer = ({
     );
   }
 
-  // ── fixing render ──────────────────────────────────────────────
   if (stage.type === "fixing") {
     const { progress } = stage;
     return (
@@ -510,7 +502,6 @@ export const IssueFixer = ({
     );
   }
 
-  // ── preview render ─────────────────────────────────────────────
   if (stage.type === "preview") {
     const { plan, diffLines, scrollOffset } = stage;
     return (
@@ -531,7 +522,6 @@ export const IssueFixer = ({
     );
   }
 
-  // ── applying render ────────────────────────────────────────────
   if (stage.type === "applying") {
     return (
       <Box marginTop={1}>
@@ -545,7 +535,6 @@ export const IssueFixer = ({
     );
   }
 
-  // ── done render ────────────────────────────────────────────────
   if (stage.type === "done") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>
@@ -581,7 +570,6 @@ export const IssueFixer = ({
     );
   }
 
-  // ── fix-all-summary render ─────────────────────────────────────
   if (stage.type === "fix-all-summary") {
     const { allApplied, failed, selectedFile } = stage;
     return (
@@ -636,7 +624,6 @@ export const IssueFixer = ({
     );
   }
 
-  // ── viewing-file render ────────────────────────────────────────
   if (stage.type === "viewing-file") {
     const { file, diffLines, scrollOffset: viewScroll } = stage;
     return (
@@ -664,7 +651,6 @@ export const IssueFixer = ({
     );
   }
 
-  // ── error render ───────────────────────────────────────────────
   if (stage.type === "error") {
     return (
       <Box flexDirection="column" marginTop={1} gap={1}>

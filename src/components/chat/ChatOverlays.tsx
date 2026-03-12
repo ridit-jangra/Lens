@@ -8,7 +8,26 @@ import { StaticMessage } from "./ChatMessage";
 import type { DiffLine, FilePatch } from "../repo/DiffViewer";
 import type { Message, ToolCall, ChatStage } from "../../types/chat";
 
-// ── Permission prompt ─────────────────────────────────────────────────────────
+function Key({ k }: { k: string }) {
+  return (
+    <Box borderStyle="single" borderColor="gray" paddingX={0}>
+      <Text color="white">{k}</Text>
+    </Box>
+  );
+}
+
+function Shortcut({ keys, label }: { keys: string[]; label: string }) {
+  return (
+    <Box gap={1} alignItems="center">
+      {keys.map((k, i) => (
+        <Key key={i} k={k} />
+      ))}
+      <Text color="gray" dimColor>
+        {label}
+      </Text>
+    </Box>
+  );
+}
 
 export function PermissionPrompt({
   tool,
@@ -18,6 +37,42 @@ export function PermissionPrompt({
   onDecide: (approved: boolean) => void;
 }) {
   const isShell = tool.type === "shell";
+  const isFetch = tool.type === "fetch";
+  const isReadFile = tool.type === "read-file";
+  const isWriteFile = tool.type === "write-file";
+
+  let icon = figures.warning;
+  let label = "Unknown tool";
+  let value = "";
+  let valueColor: "red" | "cyan" | "blue" | "green" = "cyan";
+
+  if (isShell) {
+    icon = "$";
+    label = "Run command";
+    value = (tool as { type: "shell"; command: string }).command;
+    valueColor = "red";
+  } else if (isFetch) {
+    icon = "↗";
+    label = "Fetch URL";
+    value = (tool as { type: "fetch"; url: string }).url;
+    valueColor = "cyan";
+  } else if (isReadFile) {
+    icon = "📄";
+    label = "Read file";
+    value = (tool as { type: "read-file"; filePath: string }).filePath;
+    valueColor = "blue";
+  } else if (isWriteFile) {
+    const wf = tool as {
+      type: "write-file";
+      filePath: string;
+      fileContent: string;
+    };
+    icon = "✎";
+    label = "Write file";
+    value = `${wf.filePath} (${wf.fileContent.length} bytes)`;
+    valueColor = "green";
+  }
+
   return (
     <Box
       flexDirection="column"
@@ -27,35 +82,45 @@ export function PermissionPrompt({
       paddingX={1}
       marginY={1}
     >
-      <Text bold color="yellow">
-        {figures.warning} Permission Request
-      </Text>
       <Box gap={1}>
-        <Text color="gray">{isShell ? "Run command:" : "Fetch URL:"}</Text>
-        <Text color={isShell ? "red" : "cyan"} bold>
-          {isShell
-            ? (tool as { type: "shell"; command: string }).command
-            : (tool as { type: "fetch"; url: string }).url}
+        <Text bold color="yellow">
+          {icon}
+        </Text>
+        <Text bold color="yellow">
+          {label}
         </Text>
       </Box>
-      <Text color="gray">Y/enter to allow · N/esc to deny</Text>
+      <Text color={valueColor}>{value}</Text>
+      <Box gap={3}>
+        <Shortcut keys={["Y", "↵"]} label="allow" />
+        <Shortcut keys={["N", "Esc"]} label="deny" />
+      </Box>
     </Box>
   );
 }
-
-// ── Input box ─────────────────────────────────────────────────────────────────
 
 export function InputBox({ value }: { value: string }) {
   return (
     <Box gap={1} borderStyle="round" borderColor="gray" paddingX={1}>
-      <Text color="cyan">&gt;</Text>
+      <Text color="green" bold>
+        {figures.triangleRight}
+      </Text>
       <Text color="white">{value}</Text>
-      <Text color="gray">█</Text>
+      <Text color="green">▋</Text>
     </Box>
   );
 }
 
-// ── Shared history header ─────────────────────────────────────────────────────
+export function ShortcutBar() {
+  return (
+    <Box gap={3} marginTop={0}>
+      <Shortcut keys={["↵"]} label="send" />
+      <Shortcut keys={["^V"]} label="paste" />
+      <Shortcut keys={["^C"]} label="exit" />
+      <Shortcut keys={["⌫"]} label="delete" />
+    </Box>
+  );
+}
 
 function History({ committed }: { committed: Message[] }) {
   return (
@@ -64,8 +129,6 @@ function History({ committed }: { committed: Message[] }) {
     </Static>
   );
 }
-
-// ── Clone stage renders ───────────────────────────────────────────────────────
 
 export function CloneOfferView({
   stage,
@@ -94,9 +157,10 @@ export function CloneOfferView({
           </Text>{" "}
           and analyze it?
         </Text>
-        <Text color="gray" dimColor>
-          Y/enter to clone · N/esc to skip
-        </Text>
+        <Box gap={3} marginTop={1}>
+          <Shortcut keys={["Y", "↵"]} label="clone" />
+          <Shortcut keys={["N", "Esc"]} label="skip" />
+        </Box>
       </Box>
     </Box>
   );
@@ -121,7 +185,7 @@ export function CloningView({
           <Text color="cyan" bold>
             {stage.repoUrl}
           </Text>
-          ...
+          …
         </Text>
       </Box>
     </Box>
@@ -149,9 +213,10 @@ export function CloneExistsView({
           {figures.warning} Already cloned
         </Text>
         <Text color="white">{stage.repoPath}</Text>
-        <Text color="gray" dimColor>
-          Y to re-clone · N to use existing
-        </Text>
+        <Box gap={3} marginTop={1}>
+          <Shortcut keys={["Y"]} label="re-clone" />
+          <Shortcut keys={["N"]} label="use existing" />
+        </Box>
       </Box>
     </Box>
   );
@@ -176,7 +241,7 @@ export function CloneDoneView({
         gap={0}
       >
         <Text bold color="green">
-          {figures.tick} Cloned
+          {figures.tick} Cloned successfully
         </Text>
         <Box gap={2}>
           <Text color="gray">repo </Text>
@@ -190,12 +255,12 @@ export function CloneDoneView({
         </Box>
         <Box gap={2}>
           <Text color="gray">files</Text>
-          <Text color="white">{stage.fileCount} files</Text>
+          <Text color="white">{stage.fileCount} files indexed</Text>
         </Box>
       </Box>
-      <Text color="gray" dimColor>
-        enter or esc to continue
-      </Text>
+      <Box gap={3}>
+        <Shortcut keys={["↵", "Esc"]} label="continue" />
+      </Box>
     </Box>
   );
 }
@@ -222,14 +287,12 @@ export function CloneErrorView({
         </Text>
         <Text color="white">{stage.message}</Text>
       </Box>
-      <Text color="gray" dimColor>
-        enter or esc to continue
-      </Text>
+      <Box gap={3}>
+        <Shortcut keys={["↵", "Esc"]} label="continue" />
+      </Box>
     </Box>
   );
 }
-
-// ── Preview and viewing-file renders ─────────────────────────────────────────
 
 export function PreviewView({
   stage,
@@ -242,16 +305,30 @@ export function PreviewView({
   return (
     <Box flexDirection="column" gap={1}>
       <History committed={committed} />
-      <Text bold color="cyan">
-        {figures.info} Proposed Changes
-      </Text>
-      <Box flexDirection="column">
+      <Box gap={1}>
+        <Text bold color="cyan">
+          {figures.info}
+        </Text>
+        <Text bold color="cyan">
+          Proposed Changes
+        </Text>
+        <Text color="gray" dimColor>
+          ({patches.length} file{patches.length !== 1 ? "s" : ""})
+        </Text>
+      </Box>
+      <Box flexDirection="column" marginLeft={2}>
         {patches.map((p) => (
-          <Text key={p.path} color={p.isNew ? "green" : "yellow"}>
-            {"  "}
-            {p.isNew ? figures.tick : figures.bullet} {p.path}
-            {p.isNew && <Text color="gray"> (new)</Text>}
-          </Text>
+          <Box key={p.path} gap={1}>
+            <Text color={p.isNew ? "green" : "yellow"}>
+              {p.isNew ? "+" : "~"}
+            </Text>
+            <Text color={p.isNew ? "green" : "yellow"}>{p.path}</Text>
+            {p.isNew && (
+              <Text color="gray" dimColor>
+                (new file)
+              </Text>
+            )}
+          </Box>
         ))}
       </Box>
       <DiffViewer
@@ -259,7 +336,11 @@ export function PreviewView({
         diffs={diffLines}
         scrollOffset={scrollOffset}
       />
-      <Text color="gray">↑↓ scroll · enter/A to apply · S/esc to skip</Text>
+      <Box gap={3}>
+        <Shortcut keys={["↑", "↓"]} label="scroll" />
+        <Shortcut keys={["↵", "A"]} label="apply" />
+        <Shortcut keys={["S", "Esc"]} label="skip" />
+      </Box>
     </Box>
   );
 }
@@ -279,14 +360,19 @@ export function ViewingFileView({
         <Text bold color="cyan">
           {file.path}
         </Text>
-        <Text color="gray">{file.isNew ? "(new file)" : "(modified)"}</Text>
+        <Text color="gray" dimColor>
+          {file.isNew ? "(new file)" : "(modified)"}
+        </Text>
       </Box>
       <DiffViewer
         patches={[file.patch]}
         diffs={[diffLines]}
         scrollOffset={scrollOffset}
       />
-      <Text color="gray">↑↓ scroll · esc or enter to go back</Text>
+      <Box gap={3}>
+        <Shortcut keys={["↑", "↓"]} label="scroll" />
+        <Shortcut keys={["↵", "Esc"]} label="back" />
+      </Box>
     </Box>
   );
 }

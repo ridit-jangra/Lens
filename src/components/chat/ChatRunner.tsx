@@ -18,6 +18,8 @@ import {
   toCloneUrl,
   runShell,
   fetchUrl,
+  readFile,
+  writeFile,
   buildSystemPrompt,
   parseResponse,
   callChat,
@@ -26,6 +28,7 @@ import { StaticMessage } from "./ChatMessage";
 import {
   PermissionPrompt,
   InputBox,
+  ShortcutBar,
   CloneOfferView,
   CloningView,
   CloneExistsView,
@@ -36,6 +39,11 @@ import {
 } from "./ChatOverlays";
 import type { Provider } from "../../types/config";
 import type { Message, ChatStage } from "../../types/chat";
+import {
+  appendHistory,
+  buildHistorySummary,
+  clearRepoHistory,
+} from "../../utils/history";
 
 export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [stage, setStage] = useState<ChatStage>({ type: "picking-provider" });
@@ -50,7 +58,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const thinkingPhrase = useThinkingPhrase(stage.type === "thinking");
 
-  // ── Input buffering ─────────────────────────────────────────────────────────
+  //
 
   const flushBuffer = () => {
     const buf = inputBuffer.current;
@@ -67,7 +75,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     }, 16);
   };
 
-  // ── Response handling ───────────────────────────────────────────────────────
+  //
 
   const handleError = (currentAll: Message[]) => (err: unknown) => {
     const errMsg: Message = {
@@ -83,6 +91,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const processResponse = (raw: string, currentAll: Message[]) => {
     const parsed = parseResponse(raw);
 
+    //
     if (parsed.kind === "changes") {
       if (parsed.patches.length === 0) {
         const msg: Message = {
@@ -115,11 +124,27 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    if (parsed.kind === "shell" || parsed.kind === "fetch") {
-      const tool =
-        parsed.kind === "shell"
-          ? { type: "shell" as const, command: parsed.command }
-          : { type: "fetch" as const, url: parsed.url };
+    //
+    if (
+      parsed.kind === "shell" ||
+      parsed.kind === "fetch" ||
+      parsed.kind === "read-file" ||
+      parsed.kind === "write-file"
+    ) {
+      let tool: Parameters<typeof PermissionPrompt>[0]["tool"];
+      if (parsed.kind === "shell") {
+        tool = { type: "shell", command: parsed.command };
+      } else if (parsed.kind === "fetch") {
+        tool = { type: "fetch", url: parsed.url };
+      } else if (parsed.kind === "read-file") {
+        tool = { type: "read-file", filePath: parsed.filePath };
+      } else {
+        tool = {
+          type: "write-file",
+          filePath: parsed.filePath,
+          fileContent: parsed.fileContent,
+        };
+      }
 
       if (parsed.content) {
         const preambleMsg: Message = {
@@ -140,20 +165,67 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
           if (approved) {
             try {
               setStage({ type: "thinking" });
-              result =
-                parsed.kind === "shell"
-                  ? await runShell(parsed.command, repoPath)
-                  : await fetchUrl(parsed.url);
+              if (parsed.kind === "shell") {
+                result = await runShell(parsed.command, repoPath);
+              } else if (parsed.kind === "fetch") {
+                result = await fetchUrl(parsed.url);
+              } else if (parsed.kind === "read-file") {
+                result = readFile(parsed.filePath, repoPath);
+              } else if (parsed.kind === "write-file") {
+                result = writeFile(
+                  parsed.filePath,
+                  parsed.fileContent,
+                  repoPath,
+                );
+              }
             } catch (err: unknown) {
               result = `Error: ${err instanceof Error ? err.message : "failed"}`;
             }
           }
 
+          if (approved && !result.startsWith("Error:")) {
+            const kindMap = {
+              shell: "shell-run",
+              fetch: "url-fetched",
+              "read-file": "file-read",
+              "write-file": "file-written",
+            } as const;
+            appendHistory({
+              kind: kindMap[parsed.kind as keyof typeof kindMap] ?? "shell-run",
+              detail:
+                parsed.kind === "shell"
+                  ? parsed.command
+                  : parsed.kind === "fetch"
+                    ? parsed.url
+                    : parsed.filePath,
+              summary: result.split("\n")[0]?.slice(0, 120) ?? "",
+              repoPath,
+            });
+          }
+
+          const toolName =
+            parsed.kind === "shell"
+              ? "shell"
+              : parsed.kind === "fetch"
+                ? "fetch"
+                : parsed.kind === "read-file"
+                  ? "read-file"
+                  : "write-file";
+
+          const toolContent =
+            parsed.kind === "shell"
+              ? parsed.command
+              : parsed.kind === "fetch"
+                ? parsed.url
+                : parsed.kind === "read-file"
+                  ? parsed.filePath
+                  : parsed.filePath;
+
           const toolMsg: Message = {
             role: "assistant",
             type: "tool",
-            toolName: parsed.kind,
-            content: parsed.kind === "shell" ? parsed.command : parsed.url,
+            toolName,
+            content: toolContent,
             result,
             approved,
           };
@@ -171,7 +243,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // Plain text
+    //
     const msg: Message = {
       role: "assistant",
       content: parsed.content,
@@ -203,6 +275,19 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
 
   const sendMessage = (text: string) => {
     if (!provider) return;
+
+    if (text.trim().toLowerCase() === "/clear history") {
+      clearRepoHistory(repoPath);
+      const clearedMsg: Message = {
+        role: "assistant",
+        content: "History cleared for this repo.",
+        type: "text",
+      };
+      setCommitted((prev) => [...prev, clearedMsg]);
+      setAllMessages((prev) => [...prev, clearedMsg]);
+      return;
+    }
+
     const userMsg: Message = { role: "user", content: text, type: "text" };
     const nextAll = [...allMessages, userMsg];
     setCommitted((prev) => [...prev, userMsg]);
@@ -213,10 +298,10 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       .catch(handleError(nextAll));
   };
 
-  // ── Input handler ───────────────────────────────────────────────────────────
+  //
 
   useInput((input, key) => {
-    // ── idle ───────────────────────────────────────────────────────
+    //
     if (stage.type === "idle") {
       if (key.ctrl && input === "c") {
         process.exit(0);
@@ -263,7 +348,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── clone-offer ────────────────────────────────────────────────
+    //
     if (stage.type === "clone-offer") {
       if (input === "y" || input === "Y" || key.return) {
         const { repoUrl, cloneUrl } = stage;
@@ -303,7 +388,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── clone-exists ───────────────────────────────────────────────
+    //
     if (stage.type === "clone-exists") {
       if (input === "y" || input === "Y") {
         const { repoUrl, cloneUrl, repoPath: existingPath } = stage;
@@ -344,16 +429,16 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── clone-done / clone-error ───────────────────────────────────
+    //
     if (stage.type === "clone-done" || stage.type === "clone-error") {
       if (key.return || key.escape) setStage({ type: "idle" });
       return;
     }
 
-    // ── cloning — no input ─────────────────────────────────────────
+    //
     if (stage.type === "cloning") return;
 
-    // ── permission ─────────────────────────────────────────────────
+    //
     if (stage.type === "permission") {
       if (input === "y" || input === "Y" || key.return) {
         stage.resolve(true);
@@ -366,7 +451,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── preview ────────────────────────────────────────────────────
+    //
     if (stage.type === "preview") {
       if (key.upArrow) {
         setStage({
@@ -382,8 +467,17 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       if (key.escape || input === "s" || input === "S") {
         if (pendingMsgIndex !== null) {
           const msg = allMessages[pendingMsgIndex];
-          if (msg?.type === "plan")
+          if (msg?.type === "plan") {
             setCommitted((prev) => [...prev, { ...msg, applied: false }]);
+            appendHistory({
+              kind: "code-skipped",
+              detail: msg.patches
+                .map((p: { path: string }) => p.path)
+                .join(", "),
+              summary: `Skipped changes to ${msg.patches.length} file(s)`,
+              repoPath,
+            });
+          }
         }
         setPendingMsgIndex(null);
         setStage({ type: "idle" });
@@ -392,6 +486,12 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       if (key.return || input === "a" || input === "A") {
         try {
           applyPatches(repoPath, stage.patches);
+          appendHistory({
+            kind: "code-applied",
+            detail: stage.patches.map((p) => p.path).join(", "),
+            summary: `Applied changes to ${stage.patches.length} file(s)`,
+            repoPath,
+          });
         } catch {
           /* non-fatal */
         }
@@ -411,7 +511,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       }
     }
 
-    // ── viewing-file ───────────────────────────────────────────────
+    //
     if (stage.type === "viewing-file") {
       if (key.upArrow) {
         setStage({
@@ -431,7 +531,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     }
   });
 
-  // ── Provider setup ──────────────────────────────────────────────────────────
+  //
 
   const handleProviderDone = (p: Provider) => {
     setProvider(p);
@@ -440,10 +540,14 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       .catch(() => walkDir(repoPath))
       .then((fileTree) => {
         const importantFiles = readImportantFiles(repoPath, fileTree);
-        setSystemPrompt(buildSystemPrompt(importantFiles));
+        const historySummary = buildHistorySummary(repoPath);
+        setSystemPrompt(buildSystemPrompt(importantFiles, historySummary));
+        const historyNote = historySummary
+          ? "\n\nI have memory of previous actions in this repo."
+          : "";
         const greeting: Message = {
           role: "assistant",
-          content: `Codebase loaded — ${importantFiles.length} files indexed. Ask me anything, tell me what to build, or share a URL to review.`,
+          content: `Codebase loaded — ${importantFiles.length} files indexed.${historyNote}\n\nAsk me anything, tell me what to build, share a URL, or ask me to read/write files.`,
           type: "text",
         };
         setCommitted([greeting]);
@@ -453,17 +557,18 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       .catch(() => setStage({ type: "idle" }));
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  //
 
   if (stage.type === "picking-provider")
     return <ProviderPicker onDone={handleProviderDone} />;
+
   if (stage.type === "loading") {
     return (
       <Box marginTop={1} gap={1}>
         <Text color={ORANGE}>
           <Spinner />
         </Text>
-        <Text>Indexing codebase...</Text>
+        <Text>Indexing codebase…</Text>
       </Box>
     );
   }
@@ -482,7 +587,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   if (stage.type === "viewing-file")
     return <ViewingFileView stage={stage} committed={committed} />;
 
-  // idle / thinking / permission
   return (
     <Box flexDirection="column" gap={1}>
       <Static items={committed}>
@@ -494,7 +598,9 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
           <Text color={ORANGE}>
             <Spinner />
           </Text>
-          <Text color="gray">{thinkingPhrase}</Text>
+          <Text color="gray" dimColor>
+            {thinkingPhrase}
+          </Text>
         </Box>
       )}
 
@@ -505,9 +611,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       {stage.type === "idle" && (
         <>
           <InputBox value={inputValue} />
-          <Text color="gray" dimColor>
-            enter to send · ctrl+v to paste · ctrl+c to exit
-          </Text>
+          <ShortcutBar />
         </>
       )}
     </Box>

@@ -1,4 +1,3 @@
-// components/config/RemoveProviderStep.tsx
 import { Box, Text, useInput } from "ink";
 import figures from "figures";
 import { useState } from "react";

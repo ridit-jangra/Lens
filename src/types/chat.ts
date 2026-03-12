@@ -22,7 +22,9 @@ export type Message =
 
 export type ToolCall =
   | { type: "shell"; command: string }
-  | { type: "fetch"; url: string };
+  | { type: "fetch"; url: string }
+  | { type: "read-file"; filePath: string }
+  | { type: "write-file"; filePath: string; fileContent: string };
 
 export type ChatStage =
   | { type: "picking-provider" }

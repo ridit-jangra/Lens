@@ -61,11 +61,10 @@ export function useThinkingPhrase(active: boolean, intervalMs = 2200): string {
 
   useEffect(() => {
     if (!active) return;
-    // Randomise on activation
+
     setIndex(Math.floor(Math.random() * PHRASES.length));
     const id = setInterval(() => {
       setIndex((i) => {
-        // Pick a different one each time
         let next = Math.floor(Math.random() * PHRASES.length);
         if (next === i) next = (next + 1) % PHRASES.length;
         return next;

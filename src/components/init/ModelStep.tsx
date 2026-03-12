@@ -30,7 +30,7 @@ export const ModelStep = ({
       return;
     }
     if (key.upArrow) setIndex((i) => Math.max(0, i - 1));
-    if (key.downArrow) setIndex((i) => Math.min(models.length, i + 1)); // last = custom
+    if (key.downArrow) setIndex((i) => Math.min(models.length, i + 1));
     if (key.return) {
       if (index === models.length) setTyping(true);
       else onSelect(models[index]!);
