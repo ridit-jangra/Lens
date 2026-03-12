@@ -69,10 +69,10 @@ You have exactly eleven tools. To use a tool you MUST wrap it in the exact XML t
 ### 11. search — search the internet for anything you are unsure about
 <search>how to use React useEffect cleanup function</search>
 
-### 11. clone — clone a GitHub repo so you can explore and discuss it
+### 12. clone — clone a GitHub repo so you can explore and discuss it
 <clone>https://github.com/owner/repo</clone>
 
-### 12. changes — propose code edits (shown as a diff for user approval)
+### 13. changes — propose code edits (shown as a diff for user approval)
 <changes>
 {"summary": "what changed and why", "patches": [{"path": "src/foo.ts", "content": "COMPLETE file content", "isNew": false}]}
 </changes>
@@ -91,16 +91,19 @@ You have exactly eleven tools. To use a tool you MUST wrap it in the exact XML t
 10. shell is ONLY for running code, installing packages, building, testing — not for filesystem inspection
 11. write-file content field must be the COMPLETE file content, never empty or placeholder
 12. After a write-file succeeds, do NOT repeat it — trust the result and move on
-13. After a write-file succeeds, use read-file to verify the content before telling the user it is done
+13. After a write-file succeeds, tell the user it is done immediately — do NOT auto-read the file back to verify
 14. NEVER apologize and redo a tool call you already made — if write-file or shell ran and returned a result, it worked, do not run it again
 15. NEVER say "I made a mistake" and repeat the same tool — one attempt is enough, trust the output
 16. NEVER second-guess yourself mid-response — commit to your answer
 17. If a read-folder or read-file returns "not found", accept it and move on — do NOT retry the same path
 18. If you have already retrieved a result for a path in this conversation, do NOT request it again — use the result you already have
-17. Every shell command runs from the repo root — \`cd\` has NO persistent effect. NEVER use \`cd\` alone. Use full paths or combine with && e.g. \`cd list && bun run index.ts\`
-18. write-file paths are relative to the repo root — if creating files in a subfolder write the full relative path e.g. \`list/src/index.tsx\` NOT \`src/index.tsx\`
-19. When scaffolding a new project in a subfolder, ALL write-file paths must start with that subfolder name e.g. \`list/package.json\`, \`list/src/index.tsx\`
-20. For JSX/TSX files always use \`.tsx\` extension and include \`/** @jsxImportSource react */\` or ensure tsconfig has jsx set — bun needs this to parse JSX
+19. Every shell command runs from the repo root — \`cd\` has NO persistent effect. NEVER use \`cd\` alone. Use full paths or combine with && e.g. \`cd list && bun run index.ts\`
+20. write-file paths are relative to the repo root — if creating files in a subfolder write the full relative path e.g. \`list/src/index.tsx\` NOT \`src/index.tsx\`
+21. When scaffolding a new project in a subfolder, ALL write-file paths must start with that subfolder name e.g. \`list/package.json\`, \`list/src/index.tsx\`
+22. For JSX/TSX files always use \`.tsx\` extension and include \`/** @jsxImportSource react */\` or ensure tsconfig has jsx set — bun needs this to parse JSX
+23. When explaining how to use a tool in text, use [tag] bracket notation or a fenced code block — NEVER emit a real XML tool tag as part of an explanation or example
+24. NEVER chain tool calls unless the user's request explicitly requires multiple steps
+25. NEVER read files, list folders, or run tools that were not asked for in the current user message
 
 ## CRITICAL: READ BEFORE YOU WRITE
 
@@ -179,9 +182,8 @@ ${historySummary}`;
 }
 
 // ── Few-shot examples ─────────────────────────────────────────────────────────
-
 export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
-  // read-folder examples FIRST — highest priority pattern to establish
+  // ── delete / open / pdf ───────────────────────────────────────────────────
   {
     role: "user",
     content: "delete src/old-component.tsx",
@@ -253,6 +255,8 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     role: "assistant",
     content: "Done — the PDF report has been saved to `docs/report.pdf`.",
   },
+
+  // ── grep ──────────────────────────────────────────────────────────────────
   {
     role: "user",
     content: 'grep -R "ChatRunner" -n src',
@@ -289,6 +293,28 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content:
       "`useInput` is used in `src/components/chat/ChatRunner.tsx` — imported on line 5 and called on line 210.",
   },
+
+  // ── showing tool usage as an example (bracket notation, NOT real tags) ────
+  {
+    role: "user",
+    content: "show me how to use the read-file tool",
+  },
+  {
+    role: "assistant",
+    content:
+      "To read a file, emit the tag alone in your response — nothing else on that turn:\n\n```text\n[read-file]src/components/Header.tsx[/read-file]\n```\n\nThe result comes back as the next user message and you can then analyze it.",
+  },
+  {
+    role: "user",
+    content: "show me an example of the shell tool",
+  },
+  {
+    role: "assistant",
+    content:
+      "To run a shell command, emit only the tag:\n\n```text\n[shell]node -v[/shell]\n```\n\nThe stdout/stderr is returned and you can read it in the next turn.",
+  },
+
+  // ── read-folder ───────────────────────────────────────────────────────────
   {
     role: "user",
     content: "read src folder",
@@ -415,6 +441,8 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content:
       "The repo root contains `package.json` and `README.md`, with source code in `src/` and compiled output in `dist/`.",
   },
+
+  // ── fetch → write → done (no auto-verify) ────────────────────────────────
   {
     role: "user",
     content: "fetch https://api.github.com/repos/microsoft/typescript",
@@ -449,17 +477,30 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   },
   {
     role: "assistant",
-    content: "<read-file>ts-info.json</read-file>",
+    content: "Done — `ts-info.json` has been saved.",
+  },
+
+  // ── write it to a file → done, nothing else ───────────────────────────────
+  {
+    role: "user",
+    content: "write it to a file called hello.py",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "hello.py", "content": "# hello.py\\nprint(\'hello\')"}\n</write-file>',
   },
   {
     role: "user",
     content:
-      'Here is the output from read-file of ts-info.json:\n\nFile: ts-info.json (1 lines)\n\n{"name":"TypeScript","stars":100000}\n\nPlease continue your response based on this output.',
+      "Here is the output from write-file to hello.py:\n\nWritten: /repo/hello.py (2 lines, 32 bytes)\n\nPlease continue your response based on this output.",
   },
   {
     role: "assistant",
-    content: "Done — saved and verified `ts-info.json`. Data looks correct.",
+    content: "Done — `hello.py` has been written.",
   },
+
+  // ── read before write ─────────────────────────────────────────────────────
   {
     role: "user",
     content: "add a logout button to src/components/Header.tsx",
@@ -478,6 +519,8 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content:
       '<changes>\n{"summary": "Add logout button to Header — preserves all existing nav items and imports", "patches": [{"path": "src/components/Header.tsx", "content": "// complete file with logout button added", "isNew": false}]}\n</changes>',
   },
+
+  // ── shell ─────────────────────────────────────────────────────────────────
   {
     role: "user",
     content: "what node version am I on",
@@ -495,6 +538,8 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     role: "assistant",
     content: "You're running Node.js v20.11.0.",
   },
+
+  // ── clone ─────────────────────────────────────────────────────────────────
   {
     role: "user",
     content: "clone https://github.com/facebook/react",
@@ -513,6 +558,8 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content:
       "Cloned! The React repo has 2847 files. I can read source files, explain how it works, or suggest improvements — just ask.",
   },
+
+  // ── search ────────────────────────────────────────────────────────────────
   {
     role: "user",
     content: "what does the ?? operator do in typescript",
@@ -532,7 +579,6 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
       "The `??` operator is the nullish coalescing operator. It returns the right side only when the left side is `null` or `undefined`.",
   },
 ];
-
 // ── Response parser ───────────────────────────────────────────────────────────
 
 export type ParsedResponse =
@@ -562,6 +608,10 @@ export type ParsedResponse =
   | { kind: "clone"; content: string; repoUrl: string };
 
 export function parseResponse(text: string): ParsedResponse {
+  // Strip fenced code blocks before scanning for tool tags so that tags shown
+  // as examples inside ``` ... ``` blocks are never executed.
+  const scanText = text.replace(/```[\s\S]*?```/g, (m) => " ".repeat(m.length));
+
   type Candidate = {
     index: number;
     kind:
@@ -610,15 +660,32 @@ export function parseResponse(text: string): ParsedResponse {
 
   for (const { kind, re } of patterns) {
     re.lastIndex = 0;
-    const m = re.exec(text);
-    if (m) candidates.push({ index: m.index, kind, match: m });
+    // Scan against the code-block-stripped text so tags inside ``` are ignored
+    const m = re.exec(scanText);
+    if (m) {
+      // Re-extract the match body from the original text at the same position
+      const originalRe = new RegExp(re.source, re.flags.replace("g", ""));
+      const originalMatch = originalRe.exec(text.slice(m.index));
+      if (originalMatch) {
+        // Reconstruct a match-like object with the correct index
+        const fakeMatch = Object.assign(
+          [
+            text.slice(m.index, m.index + originalMatch[0].length),
+            originalMatch[1],
+          ] as unknown as RegExpExecArray,
+          { index: m.index, input: text, groups: undefined },
+        );
+        candidates.push({ index: m.index, kind, match: fakeMatch });
+      }
+    }
   }
 
   if (candidates.length === 0) return { kind: "text", content: text.trim() };
 
   candidates.sort((a, b) => a.index - b.index);
   const { kind, match } = candidates[0]!;
-  // Strip any leaked tool tags from preamble (e.g. model emits tag twice or mid-sentence)
+
+  // Strip any leaked tool tags from preamble text
   const before = text
     .slice(0, match.index)
     .replace(
@@ -626,7 +693,7 @@ export function parseResponse(text: string): ParsedResponse {
       "",
     )
     .trim();
-  const body = match[1]!.trim();
+  const body = (match[1] ?? "").trim();
 
   if (kind === "changes") {
     try {
@@ -690,7 +757,6 @@ export function parseResponse(text: string): ParsedResponse {
         glob: parsed.glob ?? "**/*",
       };
     } catch {
-      // treat body as plain pattern with no glob
       return { kind: "grep", content: before, pattern: body, glob: "**/*" };
     }
   }
@@ -788,6 +854,7 @@ export async function callChat(
   provider: Provider,
   systemPrompt: string,
   messages: Message[],
+  abortSignal?: AbortSignal,
 ): Promise<string> {
   const apiMessages = [...FEW_SHOT_MESSAGES, ...buildApiMessages(messages)];
 
@@ -824,6 +891,8 @@ export async function callChat(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60_000);
+
+  abortSignal?.addEventListener("abort", () => controller.abort());
 
   const res = await fetch(url, {
     method: "POST",
@@ -1251,7 +1320,7 @@ export function readFolder(folderPath: string, repoPath: string): string {
     const subfolders: string[] = [];
 
     for (const entry of entries) {
-      if (entry.startsWith(".") && entry !== ".env") continue; // skip hidden except .env hint
+      if (entry.startsWith(".") && entry !== ".env") continue;
       const full = path.join(candidate, entry);
       try {
         if (statSync(full).isDirectory()) {
@@ -1297,29 +1366,22 @@ export function grepFiles(
   try {
     regex = new RegExp(pattern, "i");
   } catch {
-    // fall back to literal string match if pattern is not valid regex
     regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
   }
 
-  // Convert glob to a simple path prefix/suffix filter
-  // Supports patterns like: src/**/*.tsx, **/*.ts, src/utils/*
   const globToFilter = (g: string): ((rel: string) => boolean) => {
-    // strip leading **/
     const cleaned = g.replace(/^\*\*\//, "");
     const parts = cleaned.split("/");
     const ext = parts[parts.length - 1];
     const prefix = parts.slice(0, -1).join("/");
 
     return (rel: string) => {
-      // extension match (e.g. *.tsx)
       if (ext?.startsWith("*.")) {
-        const extSuffix = ext.slice(1); // e.g. .tsx
+        const extSuffix = ext.slice(1);
         if (!rel.endsWith(extSuffix)) return false;
       } else if (ext && !ext.includes("*")) {
-        // exact filename
         if (!rel.endsWith(ext)) return false;
       }
-      // prefix match
       if (prefix && !prefix.includes("*")) {
         if (!rel.startsWith(prefix)) return false;
       }
@@ -1452,7 +1514,6 @@ export function generatePdf(
     const dir = path.dirname(fullPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-    // Escape content for embedding in a Python string literal
     const escaped = content
       .replace(/\\/g, "\\\\")
       .replace(/"""/g, '\\"\\"\\"')
@@ -1512,7 +1573,6 @@ for line in raw.split("\\n"):
     elif s == "":
         story.append(Spacer(1, 6))
     else:
-        # handle **bold** inline
         import re
         s = re.sub(r"\\*\\*(.+?)\\*\\*", r"<b>\\1</b>", s)
         s = re.sub(r"\\*(.+?)\\*", r"<i>\\1</i>", s)

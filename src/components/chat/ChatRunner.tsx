@@ -107,6 +107,10 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [showReview, setShowReview] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
 
+  // Abort controller for the currently in-flight API call.
+  // Pressing ESC while thinking aborts the request and drops the response.
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Cache of tool results within a single conversation turn to prevent
   // the model from re-calling tools it already ran with the same args
   const toolResultCache = useRef<Map<string, string>>(new Map());
@@ -131,6 +135,11 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   };
 
   const handleError = (currentAll: Message[]) => (err: unknown) => {
+    // Silently drop aborted requests — user pressed ESC intentionally
+    if (err instanceof Error && err.name === "AbortError") {
+      setStage({ type: "idle" });
+      return;
+    }
     const errMsg: Message = {
       role: "assistant",
       content: `Error: ${err instanceof Error ? err.message : "Something went wrong"}`,
@@ -141,7 +150,17 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     setStage({ type: "idle" });
   };
 
-  const processResponse = (raw: string, currentAll: Message[]) => {
+  const processResponse = (
+    raw: string,
+    currentAll: Message[],
+    signal: AbortSignal,
+  ) => {
+    // If ESC was pressed before we got here, silently drop the response
+    if (signal.aborted) {
+      setStage({ type: "idle" });
+      return;
+    }
+
     const parsed = parseResponse(raw);
 
     if (parsed.kind === "changes") {
@@ -245,7 +264,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       const executeAndContinue = async (approved: boolean) => {
         let result = "(denied by user)";
         if (approved) {
-          // Build a cache key for idempotent read-only tools
           const cacheKey =
             parsed.kind === "read-file"
               ? `read-file:${parsed.filePath}`
@@ -256,7 +274,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
                   : null;
 
           if (cacheKey && toolResultCache.current.has(cacheKey)) {
-            // Return cached result with a note so the model stops retrying
             result =
               toolResultCache.current.get(cacheKey)! +
               "\n\n[NOTE: This result was already retrieved earlier. Do not request it again.]";
@@ -294,7 +311,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
               } else if (parsed.kind === "search") {
                 result = await searchWeb(parsed.query);
               }
-              // Store result in cache for cacheable tools
               if (cacheKey) {
                 toolResultCache.current.set(cacheKey, result);
               }
@@ -402,9 +418,13 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         setAllMessages(withTool);
         setCommitted((prev) => [...prev, toolMsg]);
 
+        // Create a fresh abort controller for the follow-up call
+        const nextAbort = new AbortController();
+        abortControllerRef.current = nextAbort;
+
         setStage({ type: "thinking" });
-        callChat(provider!, systemPrompt, withTool)
-          .then((r: string) => processResponse(r, withTool))
+        callChat(provider!, systemPrompt, withTool, nextAbort.signal)
+          .then((r: string) => processResponse(r, withTool, nextAbort.signal))
           .catch(handleError(withTool));
       };
 
@@ -510,14 +530,27 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     setCommitted((prev) => [...prev, userMsg]);
     setAllMessages(nextAll);
     toolResultCache.current.clear();
+
+    // Create a fresh abort controller for this request
+    const abort = new AbortController();
+    abortControllerRef.current = abort;
+
     setStage({ type: "thinking" });
-    callChat(provider, systemPrompt, nextAll)
-      .then((raw: string) => processResponse(raw, nextAll))
+    callChat(provider, systemPrompt, nextAll, abort.signal)
+      .then((raw: string) => processResponse(raw, nextAll, abort.signal))
       .catch(handleError(nextAll));
   };
 
   useInput((input, key) => {
     if (showTimeline) return;
+
+    // ESC while thinking → abort the in-flight request and go idle
+    if (stage.type === "thinking" && key.escape) {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      setStage({ type: "idle" });
+      return;
+    }
 
     if (stage.type === "idle") {
       if (key.ctrl && input === "c") {
@@ -844,6 +877,9 @@ Suggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
         <Box gap={1}>
           <Text color={ACCENT}>●</Text>
           <TypewriterText text={thinkingPhrase} />
+          <Text color="gray" dimColor>
+            · esc cancel
+          </Text>
         </Box>
       )}
 
