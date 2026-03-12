@@ -372,7 +372,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             ? String(tool.summariseInput(parsed.input))
             : parsed.rawInput,
           summary: result.split("\n")[0]?.slice(0, 120) ?? "",
-          repoPath,
+          // repoPath,
         });
       }
 
@@ -786,7 +786,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
               kind: "url-fetched",
               detail: repoUrl,
               summary: `Cloned ${repoName} — ${fileCount} files`,
-              repoPath,
+              // repoPath,
             });
             setClonedUrls((prev) => new Set([...prev, repoUrl]));
             setStage({
@@ -924,7 +924,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
                 .map((p: { path: string }) => p.path)
                 .join(", "),
               summary: `Skipped changes to ${msg.patches.length} file(s)`,
-              repoPath,
+              // repoPath,
             });
           }
         }
@@ -939,7 +939,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             kind: "code-applied",
             detail: stage.patches.map((p) => p.path).join(", "),
             summary: `Applied changes to ${stage.patches.length} file(s)`,
-            repoPath,
+            // repoPath,
           });
         } catch {
           /* non-fatal */
