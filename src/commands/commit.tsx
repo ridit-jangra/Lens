@@ -36,13 +36,12 @@ function gitRun(cmd: string, cwd: string): { ok: boolean; out: string } {
 function gitCommit(message: string, cwd: string): { ok: boolean; out: string } {
   const { execFileSync } =
     require("child_process") as typeof import("child_process");
-  // Split on double newline (subject / body separator) then single newlines within body
+
   const paragraphs = message
     .split(/\n\n+/)
     .map((p) => p.trim())
     .filter(Boolean);
 
-  // Build args: git commit -m <subject> -m <body line 1\nbody line 2...>
   const mArgs: string[] = [];
   for (const p of paragraphs) {
     mArgs.push("-m", p);
@@ -69,7 +68,7 @@ function stageFiles(
   cwd: string,
 ): { ok: boolean; out: string } {
   if (files.length === 0) return gitRun("git add -A", cwd);
-  // Quote each path to handle spaces
+
   const paths = files.map((f) => `"${f}"`).join(" ");
   return gitRun(`git add -- ${paths}`, cwd);
 }
@@ -112,7 +111,6 @@ function validateFiles(
   for (const f of files) {
     const abs = path.isAbsolute(f) ? f : path.join(cwd, f);
     if (existsSync(abs)) {
-      // Store as relative path for git commands
       valid.push(path.relative(cwd, abs).replace(/\\/g, "/"));
     } else {
       missing.push(f);
@@ -120,8 +118,6 @@ function validateFiles(
   }
   return { missing, valid };
 }
-
-// ── split detection ───────────────────────────────────────────────────────────
 
 function detectSplitOpportunity(diff: string): string[] {
   const fileMatches = [...diff.matchAll(/^diff --git a\/.+ b\/(.+)$/gm)];
@@ -142,8 +138,6 @@ function detectSplitOpportunity(diff: string): string[] {
     ? meaningful.map(([g, fs]) => `${g}/ (${fs.length} files)`)
     : [];
 }
-
-// ── AI generation ─────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are an expert at writing conventional commit messages.
 Given a git diff, analyze the changes and write a single commit message.
@@ -181,8 +175,6 @@ async function generateCommitMessage(
   return typeof raw === "string" ? raw.trim() : "chore: update files";
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 function trunc(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
@@ -203,8 +195,6 @@ function randomPhrase() {
   return PHRASES[Math.floor(Math.random() * PHRASES.length)]!;
 }
 
-// ── phases ────────────────────────────────────────────────────────────────────
-
 type Phase =
   | { type: "checking" }
   | { type: "no-changes" }
@@ -219,8 +209,6 @@ type Phase =
   | { type: "preview-only"; message: string }
   | { type: "error"; message: string };
 
-// ── CommitRunner ──────────────────────────────────────────────────────────────
-
 function CommitRunner({
   cwd,
   provider,
@@ -228,6 +216,7 @@ function CommitRunner({
   auto,
   preview,
   push,
+  confirm,
 }: {
   cwd: string;
   provider: Provider;
@@ -236,6 +225,8 @@ function CommitRunner({
   auto: boolean;
   preview: boolean;
   push: boolean;
+  /** Show preview even with --auto before committing */
+  confirm: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>({ type: "checking" });
   const [phraseText, setPhraseText] = useState(randomPhrase());
@@ -248,13 +239,11 @@ function CommitRunner({
 
   useEffect(() => {
     (async () => {
-      // Check git repo
       if (!gitRun("git rev-parse --git-dir", cwd).ok) {
         setPhase({ type: "error", message: "not a git repository" });
         return;
       }
 
-      // Validate specified files exist
       if (files.length > 0) {
         const { missing, valid } = validateFiles(files, cwd);
         if (missing.length > 0) {
@@ -264,7 +253,7 @@ function CommitRunner({
           });
           return;
         }
-        // Stage the validated files
+
         setPhase({ type: "staging", files: valid });
         const r = stageFiles(valid, cwd);
         if (!r.ok) {
@@ -272,7 +261,6 @@ function CommitRunner({
           return;
         }
       } else if (auto) {
-        // --auto with no specific files = stage everything
         if (!hasAnyChanges(cwd)) {
           setPhase({ type: "no-changes" });
           return;
@@ -281,24 +269,20 @@ function CommitRunner({
         gitRun("git add -A", cwd);
       }
 
-      // Check staged
       if (!hasStagedChanges(cwd)) {
         const unstaged = hasAnyChanges(cwd);
         setPhase({ type: "no-staged", hasUnstaged: unstaged, files });
         return;
       }
 
-      // Get diff — staged if we have staged changes, else specific files
       const diff = getStagedDiff(cwd) || getFileDiff(files, cwd);
       if (!diff.trim()) {
         setPhase({ type: "no-changes" });
         return;
       }
 
-      // Generate message
       setPhase({ type: "generating" });
 
-      // Helper: commit, optionally push, then set done/error
       const commitAndMaybePush = (message: string) => {
         setPhase({ type: "committing", message });
         const r = gitCommit(message, cwd);
@@ -328,13 +312,11 @@ function CommitRunner({
           return;
         }
 
-        if (auto && files.length === 0) {
-          // --auto with no specific files: commit immediately
+        if (auto && files.length === 0 && !confirm) {
           commitAndMaybePush(message);
           return;
         }
 
-        // Files were specified or --auto not set: always show preview
         setPhase({ type: "preview", message, splitGroups, diff });
       } catch (e: any) {
         setPhase({
@@ -683,14 +665,13 @@ function CommitRunner({
   );
 }
 
-// ── CommitCommand ─────────────────────────────────────────────────────────────
-
 interface Props {
   path: string;
   files: string[];
   auto: boolean;
   preview: boolean;
   push: boolean;
+  confirm: boolean;
 }
 
 export function CommitCommand({
@@ -699,6 +680,7 @@ export function CommitCommand({
   auto,
   preview,
   push,
+  confirm,
 }: Props) {
   const cwd = path.resolve(inputPath);
   const [provider, setProvider] = useState<Provider | null>(null);
@@ -725,6 +707,7 @@ export function CommitCommand({
       auto={auto}
       preview={preview}
       push={push}
+      confirm={confirm}
     />
   );
 }

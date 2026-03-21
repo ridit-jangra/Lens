@@ -1,68 +1,32 @@
-# Lens - Codebase Intelligence Tool
+# Lens Analysis
+> Generated: 2026-03-21T11:15:38.543Z
 
-Lens is a CLI tool that helps developers understand, navigate, and interact with codebases using AI-powered analysis.
+## Overview
+Lens is a CLI tool built with React components rendered in the terminal via Ink, designed to help developers understand, navigate, and interact with codebases using AI-powered analysis. The tool provides repository analysis, AI-powered insights, interactive chat, code review, timeline exploration, and task automation capabilities. Key components include ChatRunner for interactive conversations, RepoAnalysis for repository examination, and various command handlers like ReviewCommand and TaskCommand. The project uses Bun as a build tool and runtime, with Commander.js for CLI structure and TypeScript throughout for type safety.
 
-## Core Features
+## Important Folders
+- src/components: Contains core UI components like ChatRunner (handles interactive chat), RepoAnalysis (analyzes repositories), DiffViewer (shows code differences), and ProviderPicker (selects AI providers). These components use Ink for terminal rendering and provide the main user interface.
+- src/commands: Implements all CLI commands including repo (analyze remote repositories), review (local codebase analysis), task (apply natural language changes), chat (interactive conversation), timeline (commit history exploration), and commit (smart commit message generation).
+- src/utils: Contains utility functions for AI integration (ai.ts), chat processing (chat.ts), configuration management (config.ts), file operations (files.ts), git operations (git.ts), memory management (memory.ts), and thinking animations (thinking.tsx).
+- src/tools: Provides various tool implementations including files (file operations), shell (command execution), web (URL fetching), pdf (PDF generation), and git (version control operations). These tools are used throughout the chat functionality.
 
-- **Repository Analysis**: Analyze both local and remote repositories
-- **AI-Powered Insights**: Uses LLMs to understand code structure and content
-- **Interactive Chat**: Converse with your codebase using natural language
-- **Code Review**: Automated code reviews with specific suggestions
-- **Timeline Exploration**: Explore commit history and code evolution
-- **Task Automation**: Apply natural language changes to codebases
+## Missing Configs
+- ESLint configuration: The project uses TypeScript but lacks an ESLint config file (.eslintrc.js or eslint.config.js) for code quality enforcement
+- Testing setup: No test framework configuration (Jest/Vitest) or test files found, which is important for a developer tool of this complexity
+- GitHub Actions CI/CD: Missing workflow files for automated testing and deployment, which would help maintain quality for a CLI tool
 
-## Supported AI Providers
+## Security Issues
+- In src/utils/chat.ts: The parseResponse function uses regex-based XML parsing which could be vulnerable to injection attacks if malformed responses are processed
+- In src/utils/repo.ts: The cloneRepo function uses exec() with user-provided URLs without proper sanitization, potentially allowing command injection
+- In multiple files: API keys and sensitive information are handled without encryption in config files stored in ~/.lens directory
 
-- Anthropic
-- Gemini (Google AI)
-- OpenAI
-- Ollama (local models)
-- Custom endpoints
+## Suggestions
+- In src/utils/chat.ts: Replace regex-based XML parsing with a proper XML parser library to prevent injection vulnerabilities and improve reliability
+- In src/utils/repo.ts: Use execFile with proper argument sanitization instead of exec() for git operations to prevent command injection attacks
+- In src/utils/config.ts: Implement encryption for storing API keys in the config file rather than plaintext storage
+- In src/components/chat/ChatRunner.tsx: Add pagination or virtualization for long chat histories to improve performance with many messages
+- In package.json: Add linting and testing scripts to establish better code quality practices for the project
 
-## Technical Architecture
-
-- Built with React components rendered in terminal via Ink
-- TypeScript throughout for type safety
-- Bun as build tool and runtime
-- Commander.js for CLI structure
-- Modular command system with separate handlers
-
-## Commands
-
-- `lens repo <url>` - Analyze a remote repository
-- `lens review [path]` - Review a local codebase
-- `lens task <text>` - Apply natural language changes
-- `lens chat` - Interactive chat with codebase
-- `lens timeline` - Explore commit history
-- `lens provider` - Configure AI providers
-
-## Key Components
-
-- **Smart File Selection**: AI determines which files are most important
-- **Structured Analysis**: Provides overviews, folder insights, and suggestions
-- **Security Scanning**: Identifies potential security issues
-- **Multi-Model Support**: Flexible AI backend configuration
-
-## Installation
-
-```bash
-npm install -g @ridit/lens
-```
-
-## Usage
-
-```bash
-# Analyze a GitHub repository
-lens repo https://github.com/user/repo
-
-# Review local codebase
-lens review .
-
-# Chat with your code
-lens chat --path .
-
-# Make changes with natural language
-lens task "Add TypeScript types to this component" --path .
-```
-
-Lens helps developers quickly understand complex codebases through AI-assisted analysis and natural language interaction.
+<!--lens-json
+{"overview":"Lens is a CLI tool built with React components rendered in the terminal via Ink, designed to help developers understand, navigate, and interact with codebases using AI-powered analysis. The tool provides repository analysis, AI-powered insights, interactive chat, code review, timeline exploration, and task automation capabilities. Key components include ChatRunner for interactive conversations, RepoAnalysis for repository examination, and various command handlers like ReviewCommand and TaskCommand. The project uses Bun as a build tool and runtime, with Commander.js for CLI structure and TypeScript throughout for type safety.","importantFolders":["src/components: Contains core UI components like ChatRunner (handles interactive chat), RepoAnalysis (analyzes repositories), DiffViewer (shows code differences), and ProviderPicker (selects AI providers). These components use Ink for terminal rendering and provide the main user interface.","src/commands: Implements all CLI commands including repo (analyze remote repositories), review (local codebase analysis), task (apply natural language changes), chat (interactive conversation), timeline (commit history exploration), and commit (smart commit message generation).","src/utils: Contains utility functions for AI integration (ai.ts), chat processing (chat.ts), configuration management (config.ts), file operations (files.ts), git operations (git.ts), memory management (memory.ts), and thinking animations (thinking.tsx).","src/tools: Provides various tool implementations including files (file operations), shell (command execution), web (URL fetching), pdf (PDF generation), and git (version control operations). These tools are used throughout the chat functionality."],"missingConfigs":["ESLint configuration: The project uses TypeScript but lacks an ESLint config file (.eslintrc.js or eslint.config.js) for code quality enforcement","Testing setup: No test framework configuration (Jest/Vitest) or test files found, which is important for a developer tool of this complexity","GitHub Actions CI/CD: Missing workflow files for automated testing and deployment, which would help maintain quality for a CLI tool"],"securityIssues":["In src/utils/chat.ts: The parseResponse function uses regex-based XML parsing which could be vulnerable to injection attacks if malformed responses are processed","In src/utils/repo.ts: The cloneRepo function uses exec() with user-provided URLs without proper sanitization, potentially allowing command injection","In multiple files: API keys and sensitive information are handled without encryption in config files stored in ~/.lens directory"],"suggestions":["In src/utils/chat.ts: Replace regex-based XML parsing with a proper XML parser library to prevent injection vulnerabilities and improve reliability","In src/utils/repo.ts: Use execFile with proper argument sanitization instead of exec() for git operations to prevent command injection attacks","In src/utils/config.ts: Implement encryption for storing API keys in the config file rather than plaintext storage","In src/components/chat/ChatRunner.tsx: Add pagination or virtualization for long chat histories to improve performance with many messages","In package.json: Add linting and testing scripts to establish better code quality practices for the project"],"generatedAt":"2026-03-21T11:15:38.543Z"}
+lens-json-->
