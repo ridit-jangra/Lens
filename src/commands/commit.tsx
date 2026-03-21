@@ -1,9 +1,3 @@
-// ── commands/commit.tsx ───────────────────────────────────────────────────────
-//
-// lens commit              — staged diff → AI message → preview → y/e/n
-// lens commit --auto       — git add -A → AI message → commit immediately
-// lens commit --preview    — generate message, print it, don't commit
-
 import React, { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
@@ -16,8 +10,6 @@ import { ProviderPicker } from "../components/repo/ProviderPicker";
 import { callChat } from "../utils/chat";
 import type { Provider } from "../types/config";
 import type { Message } from "../types/chat";
-
-// ── git helpers ───────────────────────────────────────────────────────────────
 
 function gitRun(cmd: string, cwd: string): { ok: boolean; out: string } {
   try {
@@ -35,23 +27,38 @@ function gitRun(cmd: string, cwd: string): { ok: boolean; out: string } {
   }
 }
 
+/** Stage specific files or everything (-A) */
+function stageFiles(
+  files: string[],
+  cwd: string,
+): { ok: boolean; out: string } {
+  if (files.length === 0) return gitRun("git add -A", cwd);
+
+  const paths = files.map((f) => `"${f}"`).join(" ");
+  return gitRun(`git add -- ${paths}`, cwd);
+}
+
 function getStagedDiff(cwd: string): string {
   return gitRun("git diff --staged", cwd).out;
 }
 
-function getUnstagedDiff(cwd: string): string {
-  const tracked = gitRun("git diff HEAD", cwd).out;
-  const untracked = gitRun("git ls-files --others --exclude-standard", cwd)
-    .out.split("\n")
-    .filter(Boolean)
-    .slice(0, 10)
-    .map((f) => `=== new file: ${f} ===`)
-    .join("\n");
-  return [tracked, untracked].filter(Boolean).join("\n\n");
+/** Diff only the specified files (unstaged) */
+function getFileDiff(files: string[], cwd: string): string {
+  if (files.length === 0) {
+    const tracked = gitRun("git diff HEAD", cwd).out;
+    const untracked = gitRun("git ls-files --others --exclude-standard", cwd)
+      .out.split("\n")
+      .filter(Boolean)
+      .slice(0, 10)
+      .map((f) => `=== new file: ${f} ===`)
+      .join("\n");
+    return [tracked, untracked].filter(Boolean).join("\n\n");
+  }
+  const paths = files.map((f) => `"${f}"`).join(" ");
+  return gitRun(`git diff HEAD -- ${paths}`, cwd).out;
 }
 
 function hasStagedChanges(cwd: string): boolean {
-  // exit 1 means there ARE staged changes
   return !gitRun("git diff --staged --quiet", cwd).ok;
 }
 
@@ -59,7 +66,23 @@ function hasAnyChanges(cwd: string): boolean {
   return gitRun("git status --porcelain", cwd).out.trim().length > 0;
 }
 
-// ── split detection ───────────────────────────────────────────────────────────
+/** Validate that all specified files exist on disk */
+function validateFiles(
+  files: string[],
+  cwd: string,
+): { missing: string[]; valid: string[] } {
+  const missing: string[] = [];
+  const valid: string[] = [];
+  for (const f of files) {
+    const abs = path.isAbsolute(f) ? f : path.join(cwd, f);
+    if (existsSync(abs)) {
+      valid.push(path.relative(cwd, abs).replace(/\\/g, "/"));
+    } else {
+      missing.push(f);
+    }
+  }
+  return { missing, valid };
+}
 
 function detectSplitOpportunity(diff: string): string[] {
   const fileMatches = [...diff.matchAll(/^diff --git a\/.+ b\/(.+)$/gm)];
@@ -80,8 +103,6 @@ function detectSplitOpportunity(diff: string): string[] {
     ? meaningful.map(([g, fs]) => `${g}/ (${fs.length} files)`)
     : [];
 }
-
-// ── AI generation ─────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are an expert at writing conventional commit messages.
 Given a git diff, analyze the changes and write a single commit message.
@@ -119,8 +140,6 @@ async function generateCommitMessage(
   return typeof raw === "string" ? raw.trim() : "chore: update files";
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 function trunc(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
@@ -141,15 +160,12 @@ function randomPhrase() {
   return PHRASES[Math.floor(Math.random() * PHRASES.length)]!;
 }
 
-// ── phases ────────────────────────────────────────────────────────────────────
-
 type Phase =
-  | { type: "pick-provider" }
   | { type: "checking" }
   | { type: "no-changes" }
-  | { type: "no-staged"; hasUnstaged: boolean }
-  | { type: "staging" }
-  | { type: "generating"; phrase: string }
+  | { type: "no-staged"; hasUnstaged: boolean; files: string[] }
+  | { type: "staging"; files: string[] }
+  | { type: "generating" }
   | { type: "preview"; message: string; splitGroups: string[]; diff: string }
   | { type: "editing"; message: string; diff: string }
   | { type: "committing"; message: string }
@@ -157,16 +173,17 @@ type Phase =
   | { type: "preview-only"; message: string }
   | { type: "error"; message: string };
 
-// ── CommitRunner ──────────────────────────────────────────────────────────────
-
 function CommitRunner({
   cwd,
   provider,
+  files,
   auto,
   preview,
 }: {
   cwd: string;
   provider: Provider;
+  /** Specific files to stage. Empty = all (-A when --auto, or use existing staged) */
+  files: string[];
   auto: boolean;
   preview: boolean;
 }) {
@@ -181,38 +198,49 @@ function CommitRunner({
 
   useEffect(() => {
     (async () => {
-      // Check git repo
       if (!gitRun("git rev-parse --git-dir", cwd).ok) {
         setPhase({ type: "error", message: "not a git repository" });
         return;
       }
 
-      // --auto: stage everything first
-      if (auto) {
+      if (files.length > 0) {
+        const { missing, valid } = validateFiles(files, cwd);
+        if (missing.length > 0) {
+          setPhase({
+            type: "error",
+            message: `file${missing.length > 1 ? "s" : ""} not found:\n${missing.map((f) => `  ${f}`).join("\n")}`,
+          });
+          return;
+        }
+
+        setPhase({ type: "staging", files: valid });
+        const r = stageFiles(valid, cwd);
+        if (!r.ok) {
+          setPhase({ type: "error", message: `staging failed: ${r.out}` });
+          return;
+        }
+      } else if (auto) {
         if (!hasAnyChanges(cwd)) {
           setPhase({ type: "no-changes" });
           return;
         }
-        setPhase({ type: "staging" });
+        setPhase({ type: "staging", files: [] });
         gitRun("git add -A", cwd);
       }
 
-      // Check staged
       if (!hasStagedChanges(cwd)) {
         const unstaged = hasAnyChanges(cwd);
-        setPhase({ type: "no-staged", hasUnstaged: unstaged });
+        setPhase({ type: "no-staged", hasUnstaged: unstaged, files });
         return;
       }
 
-      // Get diff
-      const diff = getStagedDiff(cwd) || getUnstagedDiff(cwd);
+      const diff = getStagedDiff(cwd) || getFileDiff(files, cwd);
       if (!diff.trim()) {
         setPhase({ type: "no-changes" });
         return;
       }
 
-      // Generate
-      setPhase({ type: "generating", phrase: phraseText });
+      setPhase({ type: "generating" });
       try {
         const message = await generateCommitMessage(provider, diff);
         const splitGroups = detectSplitOpportunity(diff);
@@ -222,7 +250,7 @@ function CommitRunner({
           return;
         }
 
-        if (auto) {
+        if (auto && files.length === 0) {
           setPhase({ type: "committing", message });
           const r = gitRun(`git commit -m ${JSON.stringify(message)}`, cwd);
           if (!r.ok) {
@@ -258,11 +286,7 @@ function CommitRunner({
         return;
       }
       if (inp === "e" || inp === "E") {
-        setPhase({
-          type: "editing",
-          message: phase.message,
-          diff: phase.diff,
-        });
+        setPhase({ type: "editing", message: phase.message, diff: phase.diff });
         return;
       }
       if (inp === "n" || inp === "N" || key.escape) {
@@ -307,18 +331,46 @@ function CommitRunner({
         <Text color="gray" dimColor>
           {cwd}
         </Text>
+        {files.length > 0 && (
+          <Text color="cyan" dimColor>
+            {files.length} file{files.length !== 1 ? "s" : ""}
+          </Text>
+        )}
       </Box>
+
+      {files.length > 0 && (
+        <Box flexDirection="column" marginBottom={1}>
+          {files.map((f, i) => (
+            <Box key={i} gap={1}>
+              <Text color="gray" dimColor>
+                {"  ·"}
+              </Text>
+              <Text color="white">{f}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+
       <Text color="gray" dimColor>
         {div}
       </Text>
 
-      {(phase.type === "checking" || phase.type === "staging") && (
+      {phase.type === "checking" && (
         <Box gap={1} marginTop={1}>
           <Text color={ACCENT}>*</Text>
           <Text color="gray" dimColor>
-            {phase.type === "staging"
-              ? "staging all changes…"
-              : "checking changes…"}
+            checking changes…
+          </Text>
+        </Box>
+      )}
+
+      {phase.type === "staging" && (
+        <Box gap={1} marginTop={1}>
+          <Text color={ACCENT}>*</Text>
+          <Text color="gray" dimColor>
+            {phase.files.length > 0
+              ? `staging ${phase.files.length} file${phase.files.length !== 1 ? "s" : ""}…`
+              : "staging all changes…"}
           </Text>
         </Box>
       )}
@@ -341,14 +393,24 @@ function CommitRunner({
           {phase.hasUnstaged && (
             <Box flexDirection="column" marginLeft={2} gap={1}>
               <Text color="gray" dimColor>
-                you have unstaged changes. stage them first:
+                you have unstaged changes. try:
               </Text>
-              <Text color="gray" dimColor>
-                {"  "}
-                <Text color={ACCENT}>git add {"<files>"}</Text>
-                {"  "}or{"  "}
-                <Text color={ACCENT}>lens commit --auto</Text>
-              </Text>
+              {phase.files.length > 0 ? (
+                <Text color="gray" dimColor>
+                  {"  "}
+                  <Text color={ACCENT}>
+                    lens commit {phase.files.join(" ")}
+                  </Text>
+                  {"  "}(stages and commits those files)
+                </Text>
+              ) : (
+                <Text color="gray" dimColor>
+                  {"  "}
+                  <Text color={ACCENT}>git add {"<files>"}</Text>
+                  {"  "}or{"  "}
+                  <Text color={ACCENT}>lens commit --auto</Text>
+                </Text>
+              )}
             </Box>
           )}
         </Box>
@@ -513,15 +575,19 @@ function CommitRunner({
   );
 }
 
-// ── CommitCommand ─────────────────────────────────────────────────────────────
-
 interface Props {
   path: string;
+  files: string[];
   auto: boolean;
   preview: boolean;
 }
 
-export function CommitCommand({ path: inputPath, auto, preview }: Props) {
+export function CommitCommand({
+  path: inputPath,
+  files,
+  auto,
+  preview,
+}: Props) {
   const cwd = path.resolve(inputPath);
   const [provider, setProvider] = useState<Provider | null>(null);
 
@@ -540,6 +606,12 @@ export function CommitCommand({ path: inputPath, auto, preview }: Props) {
   }
 
   return (
-    <CommitRunner cwd={cwd} provider={provider} auto={auto} preview={preview} />
+    <CommitRunner
+      cwd={cwd}
+      provider={provider}
+      files={files}
+      auto={auto}
+      preview={preview}
+    />
   );
 }

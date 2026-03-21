@@ -65,24 +65,30 @@ program
   });
 
 program
-  .command("commit")
+  .command("commit [files...]")
   .description(
-    "Generate a smart conventional commit message from your staged changes",
+    "Generate a smart conventional commit message from staged changes or specific files",
   )
   .option("-p, --path <path>", "Path to the repo", ".")
   .option(
     "--auto",
-    "Stage all changes automatically and commit without confirmation",
+    "Stage all changes (or the given files) and commit without confirmation",
   )
   .option("--preview", "Show the generated message without committing")
-  .action((opts: { path: string; auto: boolean; preview: boolean }) => {
-    render(
-      <CommitCommand
-        path={opts.path}
-        auto={opts.auto ?? false}
-        preview={opts.preview ?? false}
-      />,
-    );
-  });
+  .action(
+    (
+      files: string[],
+      opts: { path: string; auto: boolean; preview: boolean },
+    ) => {
+      render(
+        <CommitCommand
+          path={opts.path}
+          files={files ?? []}
+          auto={opts.auto ?? false}
+          preview={opts.preview ?? false}
+        />,
+      );
+    },
+  );
 
 program.parse(process.argv);
