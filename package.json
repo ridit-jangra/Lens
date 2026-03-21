@@ -1,6 +1,6 @@
 {
   "name": "@ridit/lens",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "description": "Know Your Codebase.",
   "author": "Ridit Jangra <riditjangra09@gmail.com> (https://ridit.space)",
   "license": "MIT",
@@ -15,8 +15,8 @@
   "scripts": {
     "build": "bun build src/index.tsx --target node --outfile dist/index.mjs",
     "postbuild": "node -e \"const fs=require('fs');const f='dist/index.mjs';fs.writeFileSync(f,'#!/usr/bin/env node\\n'+fs.readFileSync(f,'utf8'))\"",
-    "prepublishOnly": "npm run build",
-    "test": "jest"
+    "tag": "node -e \"const v=require('./package.json').version;require('child_process').execSync('git tag v'+v+' && git push origin v'+v,{stdio:'inherit'})\"",
+    "prepublishOnly": "npm run build && npm run tag"
   },
   "dependencies": {
     "@ridit/lens-sdk": "0.1.6",
