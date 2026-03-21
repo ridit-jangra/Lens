@@ -291,7 +291,8 @@ export const readFilesTool: Tool<ReadFilesInput> = {
     `### ${i}. read-files — read multiple files from the repo at once\n<read-files>\n["src/foo.ts", "src/bar.ts"]\n</read-files>`,
   parseInput: (body) => {
     try {
-      const parsed = JSON.parse(body) as string[];
+      const cleaned = body.trim().replace(/\\/g, "/");
+      const parsed = JSON.parse(cleaned) as string[];
       if (!Array.isArray(parsed) || parsed.length === 0) return null;
       return { paths: parsed };
     } catch {
