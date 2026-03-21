@@ -18,6 +18,37 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     role: "assistant",
     content: "Done — README.md has been created.",
   },
+
+  // ── expand existing file (read first, then write) ─────────────────────────
+  {
+    role: "user",
+    content: "add more information to the README",
+  },
+  {
+    role: "assistant",
+    content: "<read-file>README.md</read-file>",
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from read-file of README.md:\n\nFile: README.md (10 lines)\n\n# Project\n\nA brief description.\n\n## Getting Started\n\n```bash\nbun install\n```\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "README.md", "content": "# Project\\n\\nA brief description.\\n\\n## Getting Started\\n\\n```bash\\nbun install\\nbun run dev\\n```\\n\\n## Features\\n\\n- Feature one\\n- Feature two\\n\\n## Contributing\\n\\nPull requests welcome."}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to README.md:\n\nWritten: /repo/README.md (20 lines, 280 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Done — README.md updated with more detail.",
+  },
+
+  // ── write a new doc file directly ─────────────────────────────────────────
   {
     role: "user",
     content: "write a contributing guide",
@@ -224,7 +255,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
       "The project root has 3 files (`package.json`, `tsconfig.json`, `README.md`) and the `src/` folder for source code.",
   },
 
-  // ── fetch → write → done ─────────────────────────────────────────────────
+  // ── fetch → write → done ──────────────────────────────────────────────────
   {
     role: "user",
     content: "fetch https://api.github.com/repos/microsoft/typescript",
@@ -393,7 +424,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
       "Done — scaffolded `myapp/package.json` and `myapp/src/index.ts`. Run `cd myapp && npm install` to get started.",
   },
 
-  // ── memory-add example ────────────────────────────────────────────────────
+  // ── memory ────────────────────────────────────────────────────────────────
   {
     role: "user",
     content: "remember that we always use bun in this project",
@@ -411,5 +442,33 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     role: "assistant",
     content:
       "<memory-delete>MEMORY_ID</memory-delete>\n\nDone — removed that memory.",
+  },
+  // ── make existing file more descriptive ───────────────────────────────────
+  {
+    role: "user",
+    content: "make the README.md more descriptive",
+  },
+  {
+    role: "assistant",
+    content: "<read-file>README.md</read-file>",
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from read-file of README.md:\n\nFile: README.md (50 lines)\n\n# Lens\n\nA CLI tool for codebase analysis.\n\n## Getting Started\n\n```bash\nbun install\nbun run dev\n```\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "README.md", "content": "# Lens\\n\\nLens is a CLI tool that brings AI-powered codebase analysis directly to your terminal. It lets you explore, understand, and modify any repository through natural language.\\n\\n## Features\\n\\n- Chat with your codebase using any LLM provider\\n- Read, write, and edit files with AI assistance\\n- Browse commit history with /timeline\\n- Auto-approve safe tool calls with /auto\\n- Persistent memory across sessions\\n\\n## Getting Started\\n\\n```bash\\nbun install\\nbun run dev\\n```\\n\\n## Commands\\n\\n- /timeline — browse commit history\\n- /auto — toggle auto-approve for safe tools\\n- /review — review the current codebase\\n- /memory list — list stored memories\\n- /chat list — list saved chat sessions"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to README.md:\n\nWritten: /repo/README.md (30 lines, 800 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Done — README.md updated with a full description of Lens.",
   },
 ];
