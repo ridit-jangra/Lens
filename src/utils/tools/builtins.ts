@@ -278,6 +278,35 @@ export const changesTool: Tool<ChangesInput> = {
   }),
 };
 
+interface ReadFilesInput {
+  paths: string[];
+}
+
+export const readFilesTool: Tool<ReadFilesInput> = {
+  name: "read-files",
+  description: "read multiple files from the repo at once",
+  safe: true,
+  permissionLabel: "read",
+  systemPromptEntry: (i) =>
+    `### ${i}. read-files — read multiple files from the repo at once\n<read-files>\n["src/foo.ts", "src/bar.ts"]\n</read-files>`,
+  parseInput: (body) => {
+    try {
+      const parsed = JSON.parse(body) as string[];
+      if (!Array.isArray(parsed) || parsed.length === 0) return null;
+      return { paths: parsed };
+    } catch {
+      return null;
+    }
+  },
+  summariseInput: ({ paths }) => paths.join(", "),
+  execute: ({ paths }, ctx) => ({
+    kind: "text",
+    value: paths
+      .map((p) => `=== ${p} ===\n${readFile(p, ctx.repoPath)}`)
+      .join("\n\n"),
+  }),
+};
+
 import { registry } from "./registry";
 
 export function registerBuiltins(): void {
@@ -297,5 +326,6 @@ export function registerBuiltins(): void {
   registry.register(viewImageTool);
   registry.register(chartDataTool);
   registry.register(convertImageTool);
+  registry.register(readFilesTool);
   registerGitTools();
 }

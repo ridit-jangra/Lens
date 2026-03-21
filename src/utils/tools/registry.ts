@@ -1,18 +1,4 @@
-// ── Tool Plugin System ────────────────────────────────────────────────────────
-//
-// To create a new tool:
-//
-//   1. Implement the Tool interface
-//   2. Call registry.register(myTool) before the app starts
-//
-// External addon example:
-//
-//   import { registry } from "lens/tools/registry";
-//   registry.register({ name: "my-tool", ... });
-
 import type { Tool } from "@ridit/lens-sdk";
-
-// ── Registry ──────────────────────────────────────────────────────────────────
 
 class ToolRegistry {
   private tools = new Map<string, Tool<unknown>>();

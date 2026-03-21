@@ -18,7 +18,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ridit/lens-sdk": "0.1.4",
+    "@ridit/lens-sdk": "0.1.6",
     "asciichart": "^1.5.25",
     "commander": "^14.0.3",
     "figures": "^6.1.0",

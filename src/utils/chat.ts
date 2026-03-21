@@ -1,5 +1,3 @@
-//
-
 export {
   walkDir,
   applyPatches,
@@ -40,6 +38,18 @@ export type ParsedResponse =
     };
 
 const MAX_HISTORY = 30;
+
+function buildFewShotMessages(): { role: string; content: string }[] {
+  const messages = [...FEW_SHOT_MESSAGES];
+  for (const tool of registry.all()) {
+    if (!tool.fewShots?.length) continue;
+    for (const shot of tool.fewShots) {
+      messages.push({ role: "user", content: shot.user });
+      messages.push({ role: "assistant", content: shot.assistant });
+    }
+  }
+  return messages;
+}
 
 export function parseResponse(text: string): ParsedResponse {
   const scanText = text.replace(/```[\s\S]*?```/g, (m) => " ".repeat(m.length));
@@ -197,7 +207,10 @@ export async function callChat(
   messages: Message[],
   abortSignal?: AbortSignal,
 ): Promise<string> {
-  const apiMessages = [...FEW_SHOT_MESSAGES, ...buildApiMessages(messages)];
+  const apiMessages = [
+    ...buildFewShotMessages(),
+    ...buildApiMessages(messages),
+  ];
 
   let url: string;
   let headers: Record<string, string>;
