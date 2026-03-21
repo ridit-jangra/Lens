@@ -218,6 +218,7 @@ export async function callChat(
   systemPrompt: string,
   messages: Message[],
   abortSignal?: AbortSignal,
+  retries = 2,
 ): Promise<string> {
   const apiMessages = [
     ...buildFewShotMessages(),
@@ -259,24 +260,55 @@ export async function callChat(
   const timer = setTimeout(() => controller.abort(), 60_000);
   abortSignal?.addEventListener("abort", () => controller.abort());
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: controller.signal,
-  });
-  clearTimeout(timer);
-  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
-  const data = (await res.json()) as Record<string, unknown>;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
 
-  if (provider.type === "anthropic") {
-    const content = data.content as { type: string; text: string }[];
-    return content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-  } else {
-    const choices = data.choices as { message: { content: string } }[];
-    return choices[0]?.message.content ?? "";
+    if (!res.ok) {
+      const errText = await res.text();
+      if (res.status >= 500 && retries > 0) {
+        await new Promise((r) => setTimeout(r, 1500));
+        return callChat(
+          provider,
+          systemPrompt,
+          messages,
+          abortSignal,
+          retries - 1,
+        );
+      }
+      throw new Error(`API error ${res.status}: ${errText}`);
+    }
+
+    const data = (await res.json()) as Record<string, unknown>;
+
+    if (provider.type === "anthropic") {
+      const content = data.content as { type: string; text: string }[];
+      return content
+        .filter((b) => b.type === "text")
+        .map((b) => b.text)
+        .join("");
+    } else {
+      const choices = data.choices as { message: { content: string } }[];
+      return choices[0]?.message.content ?? "";
+    }
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") throw err;
+    if (retries > 0) {
+      await new Promise((r) => setTimeout(r, 1500));
+      return callChat(
+        provider,
+        systemPrompt,
+        messages,
+        abortSignal,
+        retries - 1,
+      );
+    }
+    throw err;
   }
 }
