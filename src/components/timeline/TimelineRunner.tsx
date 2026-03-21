@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Box, Text, Static, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import { execSync } from "child_process";
-import { ProviderPicker } from "../repo/ProviderPicker";
+import { ProviderPicker } from "../provider/ProviderPicker";
 import {
   fetchCommits,
   fetchDiff,

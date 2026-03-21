@@ -8,6 +8,7 @@ import { ApiKeyStep } from "../components/provider/ApiKeyStep";
 import { ModelStep } from "../components/provider/ModelStep";
 import { RemoveProviderStep } from "../components/provider/RemoveProviderStep";
 import type { Provider, ProviderType } from "../types/config";
+import { ACCENT, CYAN, GREEN, TEXT } from "../colors";
 
 type InitStage =
   | { type: "menu" }
@@ -34,6 +35,8 @@ export const InitCommand = () => {
   const [menuIndex, setMenuIndex] = useState(0);
 
   const pushStep = (label: string) => setCompletedSteps((s) => [...s, label]);
+  const popStep = () => setCompletedSteps((s) => s.slice(0, -1));
+  const popSteps = (n: number) => setCompletedSteps((s) => s.slice(0, -n));
 
   useInput((input, key) => {
     if (stage.type !== "menu") return;
@@ -52,21 +55,18 @@ export const InitCommand = () => {
     return (
       <Box flexDirection="column" gap={1}>
         {completedSteps.map((s, i) => (
-          <Text key={i} color="green">
-            {figures.tick} {s}
+          <Text key={i} color={GREEN}>
+            {figures.arrowRight} {s}
           </Text>
         ))}
-        <Text bold color="cyan">
-          Lens — provider setup
-        </Text>
         {config.providers.length > 0 && (
           <Text color="gray">
-            {figures.info} {config.providers.length} provider(s) configured
+            {config.providers.length} provider(s) configured
           </Text>
         )}
         {MENU_OPTIONS.map((opt, i) => (
           <Box key={opt.action} marginLeft={1}>
-            <Text color={i === menuIndex ? "cyan" : "white"}>
+            <Text color={i === menuIndex ? ACCENT : "white"}>
               {i === menuIndex ? figures.arrowRight : " "}
               {"  "}
               {opt.label}
@@ -82,8 +82,8 @@ export const InitCommand = () => {
     return (
       <Box flexDirection="column" gap={1}>
         {completedSteps.map((s, i) => (
-          <Text key={i} color="green">
-            {figures.tick} {s}
+          <Text key={i} color={GREEN}>
+            {figures.arrowRight} {s}
           </Text>
         ))}
         <RemoveProviderStep onDone={() => setStage({ type: "menu" })} />
@@ -95,8 +95,8 @@ export const InitCommand = () => {
     return (
       <Box flexDirection="column" gap={1}>
         {completedSteps.map((s, i) => (
-          <Text key={i} color="green">
-            {figures.tick} {s}
+          <Text key={i} color={GREEN}>
+            {figures.arrowRight} {s}
           </Text>
         ))}
         <ProviderTypeStep
@@ -104,6 +104,7 @@ export const InitCommand = () => {
             pushStep(`Provider: ${providerType}`);
             setStage({ type: "api-key", providerType });
           }}
+          onBack={() => setStage({ type: "menu" })}
         />
       </Box>
     );
@@ -113,8 +114,8 @@ export const InitCommand = () => {
     return (
       <Box flexDirection="column" gap={1}>
         {completedSteps.map((s, i) => (
-          <Text key={i} color="green">
-            {figures.tick} {s}
+          <Text key={i} color={GREEN}>
+            {figures.arrowRight} {s}
           </Text>
         ))}
         <ApiKeyStep
@@ -150,6 +151,10 @@ export const InitCommand = () => {
               });
             }
           }}
+          onBack={() => {
+            popStep();
+            setStage({ type: "provider-type" });
+          }}
         />
       </Box>
     );
@@ -159,8 +164,8 @@ export const InitCommand = () => {
     return (
       <Box flexDirection="column" gap={1}>
         {completedSteps.map((s, i) => (
-          <Text key={i} color="green">
-            {figures.tick} {s}
+          <Text key={i} color={GREEN}>
+            {figures.arrowRight} {s}
           </Text>
         ))}
         <ApiKeyStep
@@ -174,6 +179,10 @@ export const InitCommand = () => {
               baseUrl: baseUrl as string,
             });
           }}
+          onBack={() => {
+            popStep();
+            setStage({ type: "api-key", providerType: stage.providerType });
+          }}
         />
       </Box>
     );
@@ -183,8 +192,8 @@ export const InitCommand = () => {
     return (
       <Box flexDirection="column" gap={1}>
         {completedSteps.map((s, i) => (
-          <Text key={i} color="green">
-            {figures.tick} {s}
+          <Text key={i} color={GREEN}>
+            {figures.arrowRight} {s}
           </Text>
         ))}
         <ModelStep
@@ -202,6 +211,10 @@ export const InitCommand = () => {
             pushStep(`Model: ${model}`);
             setStage({ type: "done", provider });
           }}
+          onBack={() => {
+            popStep();
+            setStage({ type: "api-key", providerType: stage.providerType });
+          }}
         />
       </Box>
     );
@@ -210,14 +223,15 @@ export const InitCommand = () => {
   return (
     <Box flexDirection="column" gap={1}>
       {completedSteps.map((s, i) => (
-        <Text key={i} color="green">
-          {figures.tick} {s}
+        <Text key={i} color={GREEN}>
+          {figures.arrowRight} {s}
         </Text>
       ))}
-      <Text color="green">{figures.tick} Provider configured successfully</Text>
+      <Text color={GREEN}>
+        {figures.arrowRight} Provider configured successfully
+      </Text>
       <Text color="gray">
-        {figures.info} Run <Text color="cyan">lens init</Text> again to manage
-        providers.
+        Run <Text color={CYAN}>lens provider</Text> again to manage providers.
       </Text>
     </Box>
   );

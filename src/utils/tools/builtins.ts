@@ -209,9 +209,9 @@ export const generatePdfTool: Tool<GeneratePdfInput> = {
     }
   },
   summariseInput: ({ filePath }) => filePath,
-  execute: ({ filePath, content }, ctx) => ({
+  execute: async ({ filePath, content }, ctx) => ({
     kind: "text",
-    value: generatePdf(filePath, content, ctx.repoPath),
+    value: await generatePdf(filePath, content, ctx.repoPath),
   }),
 };
 

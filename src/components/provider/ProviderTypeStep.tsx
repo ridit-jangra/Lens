@@ -2,6 +2,7 @@ import { Box, Text, useInput } from "ink";
 import figures from "figures";
 import { useState } from "react";
 import type { ProviderType } from "../../types/config";
+import { ACCENT, TEXT } from "../../colors";
 
 const OPTIONS: { type: ProviderType; label: string; description: string }[] = [
   { type: "anthropic", label: "Anthropic", description: "Claude models" },
@@ -16,12 +17,18 @@ const OPTIONS: { type: ProviderType; label: string; description: string }[] = [
 
 export const ProviderTypeStep = ({
   onSelect,
+  onBack,
 }: {
   onSelect: (type: ProviderType) => void;
+  onBack?: () => void;
 }) => {
   const [index, setIndex] = useState(0);
 
   useInput((_, key) => {
+    if (key.escape) {
+      onBack?.();
+      return;
+    }
     if (key.upArrow) setIndex((i) => Math.max(0, i - 1));
     if (key.downArrow) setIndex((i) => Math.min(OPTIONS.length - 1, i + 1));
     if (key.return) onSelect(OPTIONS[index]!.type);
@@ -29,14 +36,12 @@ export const ProviderTypeStep = ({
 
   return (
     <Box flexDirection="column" gap={1}>
-      <Text bold color="cyan">
-        Select a provider
-      </Text>
+      <Text color={TEXT}>Select a provider</Text>
       {OPTIONS.map((opt, i) => {
         const selected = i === index;
         return (
           <Box key={opt.type} marginLeft={1}>
-            <Text color={selected ? "cyan" : "white"}>
+            <Text color={selected ? ACCENT : "white"}>
               {selected ? figures.arrowRight : " "}
               {"  "}
               <Text bold={selected}>{opt.label}</Text>
@@ -48,7 +53,9 @@ export const ProviderTypeStep = ({
           </Box>
         );
       })}
-      <Text color="gray">↑↓ navigate · enter to select</Text>
+      <Text color="gray">
+        ↑↓ navigate · enter to select{onBack ? " · esc back" : ""}
+      </Text>
     </Box>
   );
 };

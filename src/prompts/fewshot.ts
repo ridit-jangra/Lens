@@ -48,6 +48,35 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content: "Done — README.md updated with more detail.",
   },
 
+  // ── update an existing file ───────────────────────────────────────────────
+  {
+    role: "user",
+    content: "update LENS.md",
+  },
+  {
+    role: "assistant",
+    content: "<read-file>LENS.md</read-file>",
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from read-file of LENS.md:\n\nFile: LENS.md (33 lines)\n\n# Lens Analysis\n\n## Overview\nA CLI tool for codebase analysis.\n\n## Important Folders\n- src/components\n- src/utils\n\n## Suggestions\n- Add tests\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "LENS.md", "content": "# Lens Analysis\\n\\n## Overview\\nA CLI tool for AI-powered codebase analysis, built with React and Ink.\\n\\n## Important Folders\\n- src/components — UI components rendered in the terminal\\n- src/utils — tools, chat, memory, and registry utilities\\n\\n## Suggestions\\n- Add tests\\n- Add more providers\\n- Improve error handling"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to LENS.md:\n\nWritten: /repo/LENS.md (15 lines, 420 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Done — LENS.md updated.",
+  },
+
   // ── write a new doc file directly ─────────────────────────────────────────
   {
     role: "user",
@@ -68,6 +97,38 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content: "Done — CONTRIBUTING.md has been written.",
   },
 
+  // ── scaffolding a project ─────────────────────────────────────────────────
+  {
+    role: "user",
+    content:
+      "scaffold a new project called myapp with package.json and src/index.tsx",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "myapp/package.json", "content": "{\\n  \\"name\\": \\"myapp\\",\\n  \\"version\\": \\"1.0.0\\",\\n  \\"scripts\\": { \\"dev\\": \\"bun run src/index.tsx\\" },\\n  \\"dependencies\\": { \\"react\\": \\"^18.2.0\\", \\"ink\\": \\"^4.4.1\\" },\\n  \\"devDependencies\\": { \\"@types/react\\": \\"^18.2.0\\" }\\n}"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to myapp/package.json:\n\nWritten: /repo/myapp/package.json (10 lines, 220 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "myapp/src/index.tsx", "content": "/** @jsxImportSource react */\\nimport React from \'react\';\\nimport { render, Text } from \'ink\';\\n\\nfunction App() {\\n  return <Text>Hello from myapp!</Text>;\\n}\\n\\nrender(<App />);"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to myapp/src/index.tsx:\n\nWritten: /repo/myapp/src/index.tsx (9 lines, 210 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      "Done — scaffolded myapp/package.json and myapp/src/index.tsx. Run `cd myapp && bun install` to get started.",
+  },
+
   // ── delete / open / pdf ───────────────────────────────────────────────────
   {
     role: "user",
@@ -84,7 +145,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   },
   {
     role: "assistant",
-    content: "Done — `src/old-component.tsx` has been deleted.",
+    content: "Done — src/old-component.tsx has been deleted.",
   },
   {
     role: "user",
@@ -101,8 +162,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   },
   {
     role: "assistant",
-    content:
-      "Done — the `src/legacy` folder and all its contents have been deleted.",
+    content: "Done — src/legacy and all its contents have been deleted.",
   },
   {
     role: "user",
@@ -138,7 +198,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   },
   {
     role: "assistant",
-    content: "Done — the PDF report has been saved to `docs/report.pdf`.",
+    content: "Done — docs/report.pdf has been generated.",
   },
 
   // ── grep ──────────────────────────────────────────────────────────────────
@@ -158,7 +218,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "assistant",
     content:
-      "`ChatRunner` is defined in `src/components/chat/ChatRunner.tsx` and imported in `src/index.tsx`.",
+      "ChatRunner is defined in src/components/chat/ChatRunner.tsx and imported in src/index.tsx.",
   },
   {
     role: "user",
@@ -176,7 +236,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "assistant",
     content:
-      "`useInput` is used in `src/components/chat/ChatRunner.tsx` — imported on line 5 and called on line 210.",
+      "useInput is used in src/components/chat/ChatRunner.tsx — imported on line 5 and called on line 210.",
   },
 
   // ── showing tool usage as an example (bracket notation, NOT real tags) ────
@@ -216,7 +276,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "assistant",
     content:
-      "The `src` folder contains `index.ts`, `App.tsx`, plus subfolders `components/` and `utils/`.",
+      "The src folder contains index.ts, App.tsx, plus subfolders components/ and utils/.",
   },
   {
     role: "user",
@@ -234,7 +294,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "assistant",
     content:
-      "The `src/components` folder has 3 files — `Header.tsx`, `Footer.tsx`, `Button.tsx` — plus two subfolders: `ui/` and `forms/`.",
+      "src/components has 3 files — Header.tsx, Footer.tsx, Button.tsx — plus two subfolders: ui/ and forms/.",
   },
   {
     role: "user",
@@ -252,7 +312,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "assistant",
     content:
-      "The project root has 3 files (`package.json`, `tsconfig.json`, `README.md`) and the `src/` folder for source code.",
+      "The project root has package.json, tsconfig.json, README.md and the src/ folder for source code.",
   },
 
   // ── fetch → write → done ──────────────────────────────────────────────────
@@ -290,7 +350,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   },
   {
     role: "assistant",
-    content: "Done — `ts-info.json` has been saved.",
+    content: "Done — ts-info.json has been saved.",
   },
 
   // ── write it to a file → done ─────────────────────────────────────────────
@@ -310,7 +370,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   },
   {
     role: "assistant",
-    content: "Done — `hello.py` has been written.",
+    content: "Done — hello.py has been written.",
   },
 
   // ── read before write (modifying existing file only) ─────────────────────
@@ -389,39 +449,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "assistant",
     content:
-      "The `??` operator is the nullish coalescing operator. It returns the right side only when the left side is `null` or `undefined`.",
-  },
-
-  // ── scaffolding ───────────────────────────────────────────────────────────
-  {
-    role: "user",
-    content:
-      "scaffold a new project called myapp with package.json and src/index.ts",
-  },
-  {
-    role: "assistant",
-    content:
-      '<write-file>\n{"path": "myapp/package.json", "content": "{\"name\":\"myapp\",\"version\":\"1.0.0\"}"}\n</write-file>',
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from write-file to myapp/package.json:\n\nWritten: /repo/myapp/package.json (1 lines, 38 bytes)\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      '<write-file>\n{"path": "myapp/src/index.ts", "content": "console.log(\'hello\')"}\n</write-file>',
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from write-file to myapp/src/index.ts:\n\nWritten: /repo/myapp/src/index.ts (1 lines, 20 bytes)\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      "Done — scaffolded `myapp/package.json` and `myapp/src/index.ts`. Run `cd myapp && npm install` to get started.",
+      "The ?? operator is the nullish coalescing operator. It returns the right side only when the left side is null or undefined.",
   },
 
   // ── memory ────────────────────────────────────────────────────────────────
@@ -442,97 +470,5 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     role: "assistant",
     content:
       "<memory-delete>MEMORY_ID</memory-delete>\n\nDone — removed that memory.",
-  },
-  // ── make existing file more descriptive ───────────────────────────────────
-  {
-    role: "user",
-    content: "make the README.md more descriptive",
-  },
-  {
-    role: "assistant",
-    content: "<read-file>README.md</read-file>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from read-file of README.md:\n\nFile: README.md (50 lines)\n\n# Lens\n\nA CLI tool for codebase analysis.\n\n## Getting Started\n\n```bash\nbun install\nbun run dev\n```\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      '<write-file>\n{"path": "README.md", "content": "# Lens\\n\\nLens is a CLI tool that brings AI-powered codebase analysis directly to your terminal. It lets you explore, understand, and modify any repository through natural language.\\n\\n## Features\\n\\n- Chat with your codebase using any LLM provider\\n- Read, write, and edit files with AI assistance\\n- Browse commit history with /timeline\\n- Auto-approve safe tool calls with /auto\\n- Persistent memory across sessions\\n\\n## Getting Started\\n\\n```bash\\nbun install\\nbun run dev\\n```\\n\\n## Commands\\n\\n- /timeline — browse commit history\\n- /auto — toggle auto-approve for safe tools\\n- /review — review the current codebase\\n- /memory list — list stored memories\\n- /chat list — list saved chat sessions"}\n</write-file>',
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from write-file to README.md:\n\nWritten: /repo/README.md (30 lines, 800 bytes)\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Done — README.md updated with a full description of Lens.",
-  },
-  {
-    role: "user",
-    content: "read src/index.ts and src/app.ts",
-  },
-  {
-    role: "assistant",
-    content: '<read-files>\n["src/index.ts", "src/app.ts"]\n</read-files>',
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from read-files of src/index.ts, src/app.ts:\n\n=== src/index.ts ===\nFile: src/index.ts (10 lines)\n\n// content...\n\n=== src/app.ts ===\nFile: src/app.ts (20 lines)\n\n// content...\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Read both files. Here's what I found...",
-  },
-  // ── update an existing file ───────────────────────────────────────────────
-  {
-    role: "user",
-    content: "update LENS.md",
-  },
-  {
-    role: "assistant",
-    content: "<read-file>LENS.md</read-file>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from read-file of LENS.md:\n\nFile: LENS.md (33 lines)\n\n# Lens Analysis\n\n## Overview\nA CLI tool for codebase analysis.\n\n## Important Folders\n- src/components\n- src/utils\n\n## Suggestions\n- Add tests\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      '<write-file>\n{"path": "LENS.md", "content": "# Lens Analysis\\n\\n## Overview\\nA CLI tool for AI-powered codebase analysis, built with React and Ink.\\n\\n## Important Folders\\n- src/components — UI components rendered in the terminal\\n- src/utils — tools, chat, memory, and registry utilities\\n\\n## Suggestions\\n- Add tests\\n- Add more providers\\n- Improve error handling"}\n</write-file>',
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from write-file to LENS.md:\n\nWritten: /repo/LENS.md (15 lines, 420 bytes)\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Done — LENS.md updated.",
-  },
-  // ── do not re-call tools after a result ───────────────────────────────────
-  {
-    role: "user",
-    content:
-      "Here is the output from my-tool:\n\nsome result text\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Done — the tool returned: some result text",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from echo:\n\nhello world\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Done — echoed: hello world",
   },
 ];

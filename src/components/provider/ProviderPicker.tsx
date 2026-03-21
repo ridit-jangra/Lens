@@ -34,7 +34,7 @@ export const ProviderPicker = ({
       <Box marginTop={1}>
         <Text color="red">
           {figures.cross} No providers configured. Run{" "}
-          <Text color="cyan">lens init</Text> first.
+          <Text color="cyan">lens provider</Text> first.
         </Text>
       </Box>
     );

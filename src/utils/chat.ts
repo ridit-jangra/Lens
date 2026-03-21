@@ -133,7 +133,9 @@ export function parseResponse(text: string): ParsedResponse {
         patches: parsed.patches,
         remainder,
       };
-    } catch {
+    } catch (e) {
+      console.error("[parseResponse] failed to parse changes JSON:", e);
+      console.error("[parseResponse] body was:", body.slice(0, 200));
       return { kind: "text", content: text.trim() };
     }
   }
@@ -148,10 +150,20 @@ export function parseResponse(text: string): ParsedResponse {
   }
 
   const tool = registry.get(toolName);
-  if (!tool) return { kind: "text", content: text.trim() };
+  if (!tool) {
+    console.error("[parseResponse] unknown tool:", toolName);
+    return { kind: "text", content: text.trim() };
+  }
 
   const input = tool.parseInput(body);
-  if (input === null) return { kind: "text", content: text.trim() };
+  if (input === null) {
+    console.error(
+      "[parseResponse] parseInput returned null for tool:",
+      toolName,
+    );
+    console.error("[parseResponse] body was:", body.slice(0, 200));
+    return { kind: "text", content: text.trim() };
+  }
 
   return {
     kind: "tool",
