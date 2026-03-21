@@ -8,6 +8,7 @@ import { ReviewCommand } from "./commands/review";
 import { TaskCommand } from "./commands/task";
 import { ChatCommand } from "./commands/chat";
 import { TimelineCommand } from "./commands/timeline";
+import { CommitCommand } from "./commands/commit";
 import { registerBuiltins } from "./utils/tools/builtins";
 import { loadAddons } from "./utils/addons/loadAddons";
 
@@ -61,6 +62,27 @@ program
   .option("-p, --path <path>", "Path to the repo", ".")
   .action((opts: { path: string }) => {
     render(<TimelineCommand path={opts.path} />);
+  });
+
+program
+  .command("commit")
+  .description(
+    "Generate a smart conventional commit message from your staged changes",
+  )
+  .option("-p, --path <path>", "Path to the repo", ".")
+  .option(
+    "--auto",
+    "Stage all changes automatically and commit without confirmation",
+  )
+  .option("--preview", "Show the generated message without committing")
+  .action((opts: { path: string; auto: boolean; preview: boolean }) => {
+    render(
+      <CommitCommand
+        path={opts.path}
+        auto={opts.auto ?? false}
+        preview={opts.preview ?? false}
+      />,
+    );
   });
 
 program.parse(process.argv);
