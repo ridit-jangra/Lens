@@ -1,50 +1,91 @@
 # Lens
 
-Know Your Codebase.
-
-Lens is a CLI tool built with React components rendered in the terminal via Ink, designed to help developers understand, navigate, and interact with codebases using AI-powered analysis.
+Lens is an AI-powered CLI tool that lets you explore, understand, and modify any codebase through natural language. Built with React and Ink for a rich terminal UI, Lens connects to multiple LLM providers and gives the AI direct access to your filesystem, shell, and the web.
 
 ## Features
 
-- Repository analysis and insights
-- AI-powered code understanding
-- Interactive chat with codebase context
-- Code review capabilities
-- Timeline exploration
-- Task automation
+- **Chat with your codebase** — ask questions, request changes, scaffold new files
+- **Multi-provider support** — Anthropic, OpenAI, Gemini, Ollama, or any OpenAI-compatible API
+- **Tool system** — AI can read/write files, run shell commands, fetch URLs, search the web, clone repos, generate PDFs, and more
+- **Plugin registry** — extend Lens with custom tools via `@ridit/lens-sdk`
+- **Diff preview** — proposed code changes are shown as a diff before applying
+- **Auto-approve mode** — `/auto` skips confirmation for safe read/search tools
+- **Force-all mode** — `/auto --force-all` approves everything including shell and writes
+- **Persistent memory** — Lens remembers project-specific context across sessions
+- **Chat history** — save, load, rename, and delete chat sessions per repo
+- **Smart commits** — generate conventional commit messages from staged changes
+- **Timeline** — browse and explore commit history
+- **Repo analysis** — deep codebase review from a remote URL or local path
 
 ## Installation
 
 ```bash
+# using bun
+bun add @ridit/lens -g
+
+# using npm
 npm install -g @ridit/lens
 ```
 
-## Usage
+## CLI Commands
 
-```bash
-lens <command> [options]
+```
+lens chat                        chat with your codebase
+lens chat -p /path/to/repo       chat in a specific repo
+
+lens review                      AI review of the current directory
+lens review /path/to/repo        AI review of a specific repo
+
+lens repo <url>                  analyze a remote GitHub repository
+
+lens task <text>                 apply a natural language change to the codebase
+lens task <text> -p /path        apply change to a specific repo
+
+lens commit                      generate a smart commit message from staged changes
+lens commit [files...]           stage specific files and generate a commit message
+lens commit --auto               stage all changes and commit without confirmation
+lens commit --confirm            show preview before committing when using --auto
+lens commit --preview            show the generated message without committing
+lens commit --push               push to remote after committing
+
+lens timeline                    explore commit history
+lens timeline -p /path           explore history of a specific repo
+
+lens provider                    configure AI providers
 ```
 
-### Commands
+## Chat Commands
 
-- `lens repo <url>` - Analyze a remote repository
-- `lens review` - Review local codebase
-- `lens task <prompt>` - Apply natural language changes
-- `lens chat` - Interactive conversation about code
-- `lens timeline` - Explore commit history
-- `lens commit` - Generate smart commit messages
+Once inside a `lens chat` session, use slash commands:
 
-## Development
-
-```bash
-bun install
-bun run build
 ```
+/timeline              browse commit history
+/review                AI review of the current codebase
+/auto                  toggle auto-approve for safe tools (read, search, fetch)
+/auto --force-all      auto-approve ALL tools including shell and writes ⚠️
+/chat list             list saved chat sessions for this repo
+/chat load <name>      load a saved chat session
+/chat rename <name>    rename the current session
+/chat delete <name>    delete a saved session
+/memory list           list stored memories for this repo
+/memory add <text>     add a memory
+/memory delete <id>    delete a memory by ID
+/memory clear          clear all memories for this repo
+/clear history         wipe session memory for this repo
+```
+
+## Supported Providers
+
+- **Anthropic** — Claude models
+- **OpenAI** — GPT models
+- **Gemini** — Google Gemini models
+- **Ollama** — local models
+- **Custom** — any OpenAI-compatible API endpoint
+
+## Extending Lens
+
+Custom tools can be built and registered using [`@ridit/lens-sdk`](https://www.npmjs.com/package/@ridit/lens-sdk).
 
 ## License
 
-MIT License - see LICENSE file for details
-
-## Contributing
-
-Pull requests welcome. Please open an issue first to discuss major changes.
+MIT
