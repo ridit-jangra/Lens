@@ -7,7 +7,7 @@
     "jsx": "react-jsx",
     "allowJs": true,
     "outDir": "dist",
-    // "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
     "verbatimModuleSyntax": true,
 
     "strict": true,
