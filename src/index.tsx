@@ -75,10 +75,11 @@ program
     "Stage all changes (or the given files) and commit without confirmation",
   )
   .option("--preview", "Show the generated message without committing")
+  .option("--push", "Push to remote after committing")
   .action(
     (
       files: string[],
-      opts: { path: string; auto: boolean; preview: boolean },
+      opts: { path: string; auto: boolean; preview: boolean; push: boolean },
     ) => {
       render(
         <CommitCommand
@@ -86,6 +87,7 @@ program
           files={files ?? []}
           auto={opts.auto ?? false}
           preview={opts.preview ?? false}
+          push={opts.push ?? false}
         />,
       );
     },

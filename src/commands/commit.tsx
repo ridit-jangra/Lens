@@ -169,7 +169,8 @@ type Phase =
   | { type: "preview"; message: string; splitGroups: string[]; diff: string }
   | { type: "editing"; message: string; diff: string }
   | { type: "committing"; message: string }
-  | { type: "done"; message: string; hash: string }
+  | { type: "pushing"; message: string; hash: string }
+  | { type: "done"; message: string; hash: string; pushed: boolean }
   | { type: "preview-only"; message: string }
   | { type: "error"; message: string };
 
@@ -179,6 +180,7 @@ function CommitRunner({
   files,
   auto,
   preview,
+  push,
 }: {
   cwd: string;
   provider: Provider;
@@ -186,6 +188,7 @@ function CommitRunner({
   files: string[];
   auto: boolean;
   preview: boolean;
+  push: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>({ type: "checking" });
   const [phraseText, setPhraseText] = useState(randomPhrase());
@@ -241,6 +244,27 @@ function CommitRunner({
       }
 
       setPhase({ type: "generating" });
+
+      const commitAndMaybePush = (message: string) => {
+        setPhase({ type: "committing", message });
+        const r = gitRun(`git commit -m ${JSON.stringify(message)}`, cwd);
+        if (!r.ok) {
+          setPhase({ type: "error", message: r.out });
+          return false;
+        }
+        const hash = gitRun("git rev-parse --short HEAD", cwd).out || "?";
+        if (push) {
+          setPhase({ type: "pushing", message, hash });
+          const pr = gitRun("git push", cwd);
+          if (!pr.ok) {
+            setPhase({ type: "error", message: `push failed: ${pr.out}` });
+            return false;
+          }
+        }
+        setPhase({ type: "done", message, hash, pushed: push });
+        return true;
+      };
+
       try {
         const message = await generateCommitMessage(provider, diff);
         const splitGroups = detectSplitOpportunity(diff);
@@ -251,14 +275,7 @@ function CommitRunner({
         }
 
         if (auto && files.length === 0) {
-          setPhase({ type: "committing", message });
-          const r = gitRun(`git commit -m ${JSON.stringify(message)}`, cwd);
-          if (!r.ok) {
-            setPhase({ type: "error", message: r.out });
-            return;
-          }
-          const hash = gitRun("git rev-parse --short HEAD", cwd).out || "?";
-          setPhase({ type: "done", message, hash });
+          commitAndMaybePush(message);
           return;
         }
 
@@ -275,14 +292,23 @@ function CommitRunner({
   useInput((inp, key) => {
     if (phase.type === "preview") {
       if (inp === "y" || inp === "Y" || key.return) {
-        setPhase({ type: "committing", message: phase.message });
-        const r = gitRun(`git commit -m ${JSON.stringify(phase.message)}`, cwd);
+        const message = phase.message;
+        setPhase({ type: "committing", message });
+        const r = gitRun(`git commit -m ${JSON.stringify(message)}`, cwd);
         if (!r.ok) {
           setPhase({ type: "error", message: r.out });
           return;
         }
         const hash = gitRun("git rev-parse --short HEAD", cwd).out || "?";
-        setPhase({ type: "done", message: phase.message, hash });
+        if (push) {
+          setPhase({ type: "pushing", message, hash });
+          const pr = gitRun("git push", cwd);
+          if (!pr.ok) {
+            setPhase({ type: "error", message: `push failed: ${pr.out}` });
+            return;
+          }
+        }
+        setPhase({ type: "done", message, hash, pushed: push });
         return;
       }
       if (inp === "e" || inp === "E") {
@@ -513,6 +539,24 @@ function CommitRunner({
         </Box>
       )}
 
+      {phase.type === "pushing" && (
+        <Box flexDirection="column" marginTop={1} gap={1}>
+          <Box gap={2}>
+            <Text color="green">{figures.tick}</Text>
+            <Text color={ACCENT}>{phase.hash}</Text>
+            <Text color="white">
+              {trunc(phase.message.split("\n")[0]!, 65)}
+            </Text>
+          </Box>
+          <Box gap={1} marginLeft={2}>
+            <Text color={ACCENT}>*</Text>
+            <Text color="gray" dimColor>
+              pushing…
+            </Text>
+          </Box>
+        </Box>
+      )}
+
       {phase.type === "done" && (
         <Box flexDirection="column" marginTop={1} gap={1}>
           <Box gap={2}>
@@ -531,6 +575,14 @@ function CommitRunner({
                 {line}
               </Text>
             ))}
+          {phase.pushed && (
+            <Box gap={2} marginTop={1}>
+              <Text color="green">{figures.tick}</Text>
+              <Text color="gray" dimColor>
+                pushed to remote
+              </Text>
+            </Box>
+          )}
           <Text color="gray" dimColor>
             press any key to exit
           </Text>
@@ -580,6 +632,7 @@ interface Props {
   files: string[];
   auto: boolean;
   preview: boolean;
+  push: boolean;
 }
 
 export function CommitCommand({
@@ -587,6 +640,7 @@ export function CommitCommand({
   files,
   auto,
   preview,
+  push,
 }: Props) {
   const cwd = path.resolve(inputPath);
   const [provider, setProvider] = useState<Provider | null>(null);
@@ -612,6 +666,7 @@ export function CommitCommand({
       files={files}
       auto={auto}
       preview={preview}
+      push={push}
     />
   );
 }
