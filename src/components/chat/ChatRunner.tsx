@@ -62,6 +62,10 @@ const COMMANDS = [
   { cmd: "/clear history", desc: "wipe session memory for this repo" },
   { cmd: "/review", desc: "review current codebase" },
   { cmd: "/auto", desc: "toggle auto-approve for read/search tools" },
+  {
+    cmd: "/auto --force-all",
+    desc: "auto-approve ALL tools including shell and writes (⚠ dangerous)",
+  },
   { cmd: "/chat", desc: "chat history commands" },
   { cmd: "/chat list", desc: "list saved chats for this repo" },
   { cmd: "/chat load", desc: "load a saved chat by name" },
@@ -128,6 +132,71 @@ function CommandPalette({
   );
 }
 
+function ForceAllWarning({
+  onConfirm,
+}: {
+  onConfirm: (confirmed: boolean) => void;
+}) {
+  const [input, setInput] = useState("");
+
+  return (
+    <Box flexDirection="column" marginY={1} gap={1}>
+      <Box gap={1}>
+        <Text color="red" bold>
+          ⚠ WARNING
+        </Text>
+      </Box>
+      <Box flexDirection="column" marginLeft={2} gap={1}>
+        <Text color="yellow">
+          Force-all mode auto-approves EVERY tool without asking — including:
+        </Text>
+        <Text color="red" dimColor>
+          {" "}
+          · shell commands (rm, git, npm, anything)
+        </Text>
+        <Text color="red" dimColor>
+          {" "}
+          · file writes and deletes
+        </Text>
+        <Text color="red" dimColor>
+          {" "}
+          · folder deletes
+        </Text>
+        <Text color="red" dimColor>
+          {" "}
+          · external fetches and URL opens
+        </Text>
+        <Text color="yellow" dimColor>
+          The AI can modify or delete files without any confirmation.
+        </Text>
+        <Text color="yellow" dimColor>
+          Only use this in throwaway environments or when you fully trust the
+          task.
+        </Text>
+      </Box>
+      <Box gap={1} marginTop={1}>
+        <Text color="gray">Type </Text>
+        <Text color="white" bold>
+          yes
+        </Text>
+        <Text color="gray"> to enable, or press </Text>
+        <Text color="white" bold>
+          esc
+        </Text>
+        <Text color="gray"> to cancel: </Text>
+        <TextInput
+          value={input}
+          onChange={setInput}
+          onSubmit={(v) => onConfirm(v.trim().toLowerCase() === "yes")}
+          placeholder="yes / esc to cancel"
+        />
+      </Box>
+    </Box>
+  );
+}
+
+import TextInput from "ink-text-input";
+
 export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [stage, setStage] = useState<ChatStage>({ type: "picking-provider" });
   const [committed, setCommitted] = useState<Message[]>([]);
@@ -140,6 +209,8 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [showTimeline, setShowTimeline] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
+  const [forceApprove, setForceApprove] = useState(false);
+  const [showForceWarning, setShowForceWarning] = useState(false);
   const [chatName, setChatName] = useState<string | null>(null);
   const chatNameRef = useRef<string | null>(null);
   const [recentChats, setRecentChats] = useState<string[]>([]);
@@ -154,11 +225,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const toolResultCache = useRef<Map<string, string>>(new Map());
-
-  // When the user approves a tool that has chained remainder calls, we
-  // automatically approve subsequent tools in the same chain so the user
-  // doesn't have to press y for every file in a 10-file scaffold.
-  // This ref is set to true on the first approval and cleared when the chain ends.
   const batchApprovedRef = useRef(false);
 
   const thinkingPhrase = useThinkingPhrase(stage.type === "thinking");
@@ -190,6 +256,28 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     setStage({ type: "idle" });
   };
 
+  const TOOL_TAG_NAMES = [
+    "shell",
+    "fetch",
+    "read-file",
+    "read-folder",
+    "grep",
+    "write-file",
+    "delete-file",
+    "delete-folder",
+    "open-url",
+    "generate-pdf",
+    "search",
+    "clone",
+    "changes",
+  ];
+
+  function isLikelyTruncated(text: string): boolean {
+    return TOOL_TAG_NAMES.some(
+      (tag) => text.includes(`<${tag}>`) && !text.includes(`</${tag}>`),
+    );
+  }
+
   const processResponse = (
     raw: string,
     currentAll: Message[],
@@ -201,7 +289,20 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // Handle inline memory operations
+    // Guard: response cut off mid-tool-tag (context limit hit during generation)
+    if (isLikelyTruncated(raw)) {
+      const truncMsg: Message = {
+        role: "assistant",
+        content:
+          "(response cut off — the model hit its output limit mid-tool-call. Try asking it to continue, or simplify the request.)",
+        type: "text",
+      };
+      setAllMessages([...currentAll, truncMsg]);
+      setCommitted((prev) => [...prev, truncMsg]);
+      setStage({ type: "idle" });
+      return;
+    }
+
     const memAddMatches = [
       ...raw.matchAll(/<memory-add>([\s\S]*?)<\/memory-add>/g),
     ];
@@ -222,8 +323,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       .trim();
 
     const parsed = parseResponse(cleanRaw);
-
-    // ── changes (diff preview UI) ──────────────────────────────────────────
 
     if (parsed.kind === "changes") {
       batchApprovedRef.current = false;
@@ -259,8 +358,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── clone (git clone UI flow) ──────────────────────────────────────────
-
     if (parsed.kind === "clone") {
       batchApprovedRef.current = false;
       if (parsed.content) {
@@ -280,10 +377,22 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── text ──────────────────────────────────────────────────────────────
-
     if (parsed.kind === "text") {
       batchApprovedRef.current = false;
+
+      if (!parsed.content.trim()) {
+        const stallMsg: Message = {
+          role: "assistant",
+          content:
+            '(no response — the model may have stalled. Try sending a short follow-up like "continue" or start a new message.)',
+          type: "text",
+        };
+        setAllMessages([...currentAll, stallMsg]);
+        setCommitted((prev) => [...prev, stallMsg]);
+        setStage({ type: "idle" });
+        return;
+      }
+
       const msg: Message = {
         role: "assistant",
         content: parsed.content,
@@ -309,8 +418,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // ── generic tool ──────────────────────────────────────────────────────
-
     const tool = registry.get(parsed.toolName);
     if (!tool) {
       batchApprovedRef.current = false;
@@ -332,8 +439,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     const isSafe = tool.safe ?? false;
 
     const executeAndContinue = async (approved: boolean) => {
-      // If the user approved this tool and there are more in the chain,
-      // mark the batch as approved so subsequent tools skip the prompt.
       if (approved && remainder) {
         batchApprovedRef.current = true;
       }
@@ -372,7 +477,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             ? String(tool.summariseInput(parsed.input))
             : parsed.rawInput,
           summary: result.split("\n")[0]?.slice(0, 120) ?? "",
-          // repoPath,
         });
       }
 
@@ -393,13 +497,11 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       setAllMessages(withTool);
       setCommitted((prev) => [...prev, toolMsg]);
 
-      // Chain: process remainder immediately, no API round-trip needed.
       if (approved && remainder && remainder.length > 0) {
         processResponse(remainder, withTool, signal);
         return;
       }
 
-      // Chain ended (or was never chained) — clear batch approval.
       batchApprovedRef.current = false;
 
       const nextAbort = new AbortController();
@@ -410,9 +512,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         .catch(handleError(withTool));
     };
 
-    // Auto-approve if: tool is safe, or global auto-approve is on, or we're
-    // already inside a user-approved batch chain.
-    if ((autoApprove && isSafe) || batchApprovedRef.current) {
+    if (forceApprove || (autoApprove && isSafe) || batchApprovedRef.current) {
       executeAndContinue(true);
       return;
     }
@@ -446,7 +546,41 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
+    // /auto --force-all — show warning first
+    if (text.trim().toLowerCase() === "/auto --force-all") {
+      if (forceApprove) {
+        // Toggle off immediately, no warning needed
+        setForceApprove(false);
+        setAutoApprove(false);
+        const msg: Message = {
+          role: "assistant",
+          content: "Force-all mode OFF — tools will ask for permission again.",
+          type: "text",
+        };
+        setCommitted((prev) => [...prev, msg]);
+        setAllMessages((prev) => [...prev, msg]);
+      } else {
+        setShowForceWarning(true);
+      }
+      return;
+    }
+
     if (text.trim().toLowerCase() === "/auto") {
+      // /auto never enables force-all, only toggles safe auto-approve
+      if (forceApprove) {
+        // Step down from force-all to normal auto
+        setForceApprove(false);
+        setAutoApprove(true);
+        const msg: Message = {
+          role: "assistant",
+          content:
+            "Force-all mode OFF — switched to normal auto-approve (safe tools only).",
+          type: "text",
+        };
+        setCommitted((prev) => [...prev, msg]);
+        setAllMessages((prev) => [...prev, msg]);
+        return;
+      }
       const next = !autoApprove;
       setAutoApprove(next);
       const msg: Message = {
@@ -696,7 +830,8 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     const nextAll = [...allMessages, userMsg];
     setCommitted((prev) => [...prev, userMsg]);
     setAllMessages(nextAll);
-    toolResultCache.current.clear();
+    // Do NOT clear toolResultCache here — safe tool results (read-file, read-folder, grep)
+    // persist across the whole session so the model never re-reads the same resource twice.
     batchApprovedRef.current = false;
 
     inputHistoryRef.current = [
@@ -727,6 +862,12 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
 
   useInput((input, key) => {
     if (showTimeline) return;
+
+    // Esc cancels the force-all warning
+    if (showForceWarning && key.escape) {
+      setShowForceWarning(false);
+      return;
+    }
 
     if (stage.type === "thinking" && key.escape) {
       abortControllerRef.current?.abort();
@@ -786,7 +927,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
               kind: "url-fetched",
               detail: repoUrl,
               summary: `Cloned ${repoName} — ${fileCount} files`,
-              // repoPath,
             });
             setClonedUrls((prev) => new Set([...prev, repoUrl]));
             setStage({
@@ -924,7 +1064,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
                 .map((p: { path: string }) => p.path)
                 .join(", "),
               summary: `Skipped changes to ${msg.patches.length} file(s)`,
-              // repoPath,
             });
           }
         }
@@ -939,7 +1078,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             kind: "code-applied",
             detail: stage.patches.map((p) => p.path).join(", "),
             summary: `Applied changes to ${stage.patches.length} file(s)`,
-            // repoPath,
           });
         } catch {
           /* non-fatal */
@@ -1054,7 +1192,36 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         {(msg, i) => <StaticMessage key={i} msg={msg} />}
       </Static>
 
-      {stage.type === "thinking" && (
+      {/* Force-all warning overlay */}
+      {showForceWarning && (
+        <ForceAllWarning
+          onConfirm={(confirmed) => {
+            setShowForceWarning(false);
+            if (confirmed) {
+              setForceApprove(true);
+              setAutoApprove(true);
+              const msg: Message = {
+                role: "assistant",
+                content:
+                  "⚡⚡ Force-all mode ON — ALL tools auto-approved including shell and writes. Type /auto --force-all again to disable.",
+                type: "text",
+              };
+              setCommitted((prev) => [...prev, msg]);
+              setAllMessages((prev) => [...prev, msg]);
+            } else {
+              const msg: Message = {
+                role: "assistant",
+                content: "Force-all cancelled.",
+                type: "text",
+              };
+              setCommitted((prev) => [...prev, msg]);
+              setAllMessages((prev) => [...prev, msg]);
+            }
+          }}
+        />
+      )}
+
+      {!showForceWarning && stage.type === "thinking" && (
         <Box gap={1}>
           <Text color={ACCENT}>●</Text>
           <TypewriterText text={thinkingPhrase} />
@@ -1064,11 +1231,11 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         </Box>
       )}
 
-      {stage.type === "permission" && (
+      {!showForceWarning && stage.type === "permission" && (
         <PermissionPrompt tool={stage.tool} onDecide={stage.resolve} />
       )}
 
-      {stage.type === "idle" && (
+      {!showForceWarning && stage.type === "idle" && (
         <Box flexDirection="column">
           {inputValue.startsWith("/") && (
             <CommandPalette
@@ -1089,7 +1256,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             }}
             inputKey={inputKey}
           />
-          <ShortcutBar autoApprove={autoApprove} />
+          <ShortcutBar autoApprove={autoApprove} forceApprove={forceApprove} />
         </Box>
       )}
     </Box>
