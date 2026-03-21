@@ -46,7 +46,7 @@ const PHRASES: Record<string, string[]> = {
     "it's the tokens for me... ✨",
     "vibing with the prompt... 🎵",
     "main character moment incoming... 🎬",
-    "we move... 🚶",
+    "we move... 🫡🫡",
     "rizzing up an answer... 🗣️",
     "rizzing up a baddie answer... 😏",
   ],
