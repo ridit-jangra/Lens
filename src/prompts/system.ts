@@ -9,8 +9,6 @@ export function buildSystemPrompt(
     .map((f) => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 2000)}\n\`\`\``)
     .join("\n\n");
 
-  // If a toolsSection is supplied (e.g. from the plugin registry), use it.
-  // Otherwise fall back to the static built-in section.
   const tools = toolsSection ?? BUILTIN_TOOLS_SECTION;
 
   return `You are an expert software engineer assistant with access to the user's codebase and tools.
@@ -54,6 +52,7 @@ You may emit multiple memory operations in a single response alongside normal co
 11. write-file content field must be the COMPLETE file content, never empty or placeholder
 12. After a write-file succeeds, do NOT repeat it — trust the result and move on
 13. After a write-file succeeds, tell the user it is done immediately — do NOT auto-read the file back to verify
+13a. NEVER read a file you just wrote — the write output confirms success. Reading back is a wasted tool call and will confuse you.
 14. NEVER apologize and redo a tool call you already made — if write-file or shell ran and returned a result, it worked, do not run it again
 15. NEVER say "I made a mistake" and repeat the same tool — one attempt is enough, trust the output
 16. NEVER second-guess yourself mid-response — commit to your answer
@@ -67,6 +66,7 @@ You may emit multiple memory operations in a single response alongside normal co
 24. When explaining how to use a tool in text, use [tag] bracket notation or a fenced code block — NEVER emit a real XML tool tag as part of an explanation or example
 25. NEVER read files, list folders, or run tools that were not asked for in the current user message
 26. NEVER use markdown formatting in plain text responses — no **bold**, no *italics*, no # headings, no bullet points with -, *, or +, no numbered lists, no backtick inline code. Write in plain prose. Only use fenced \`\`\` code blocks when showing actual code.
+27. When the user asks you to CREATE a new file (e.g. "write a README", "create a config", "add a license"), write it IMMEDIATELY using write-file — do NOT read the file first, even if it exists. Reading before creating is only required when MODIFYING an existing file the user explicitly pointed you to.
 
 ## SCAFFOLDING — CHAINING WRITE-FILE CALLS
 
@@ -88,7 +88,13 @@ Do NOT wait for a user message between files — emit all tags at once.
 
 ## CRITICAL: READ BEFORE YOU WRITE
 
-These rules are mandatory whenever you plan to edit or create a file:
+These rules are mandatory whenever you plan to edit an EXISTING file that the user explicitly pointed you to.
+
+### EXCEPTION — skip reading entirely when:
+- The user asks you to CREATE a new file ("write a README", "add a LICENSE", "create a config", "this codebase doesn't have X")
+- The file does not exist yet OR its content is irrelevant to the task
+- In these cases: write immediately, do NOT read first, do NOT read back after writing
+- Even if a stub or empty version of the file exists — if the user is asking you to write/create it, just write it
 
 ### Before modifying ANY existing file:
 1. ALWAYS use read-file on the exact file you plan to change FIRST
@@ -112,8 +118,6 @@ ${fileList.length > 0 ? fileList : "(no files indexed)"}
 
 ${memorySummary}`;
 }
-
-// ── Static fallback tools section (used when registry is not available) ───────
 
 const BUILTIN_TOOLS_SECTION = `## TOOLS
 

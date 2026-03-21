@@ -186,15 +186,25 @@ export function TypewriterText({
   return <Text color={color}>{displayed}</Text>;
 }
 
-export function ShortcutBar({ autoApprove }: { autoApprove?: boolean }) {
+export function ShortcutBar({
+  autoApprove,
+  forceApprove,
+}: {
+  autoApprove?: boolean;
+  forceApprove?: boolean;
+}) {
   return (
     <Box gap={3} marginTop={0}>
       <Text color="gray" dimColor>
         enter send · ^v paste · ^c exit
       </Text>
-      <Text color={autoApprove ? "green" : "gray"} dimColor={!autoApprove}>
-        {autoApprove ? "⚡ auto" : "/auto"}
-      </Text>
+      {forceApprove ? (
+        <Text color="red">⚡⚡ force-all</Text>
+      ) : (
+        <Text color={autoApprove ? "green" : "gray"} dimColor={!autoApprove}>
+          {autoApprove ? "⚡ auto" : "/auto"}
+        </Text>
+      )}
     </Box>
   );
 }

@@ -1,8 +1,4 @@
-// ── chat.ts ───────────────────────────────────────────────────────────────────
 //
-// Response parsing and API calls.
-// Tool parsing is now fully driven by the ToolRegistry — adding a new tool
-// to the registry automatically makes it parseable here.
 
 export {
   walkDir,
@@ -43,6 +39,8 @@ export type ParsedResponse =
       remainder?: string;
     };
 
+const MAX_HISTORY = 30;
+
 export function parseResponse(text: string): ParsedResponse {
   const scanText = text.replace(/```[\s\S]*?```/g, (m) => " ".repeat(m.length));
 
@@ -56,7 +54,6 @@ export function parseResponse(text: string): ParsedResponse {
   for (const toolName of registry.names()) {
     const escaped = toolName.replace(/[-]/g, "\\-");
 
-    // XML tag
     const xmlRe = new RegExp(`<${escaped}>([\\s\\S]*?)<\\/${escaped}>`, "g");
     xmlRe.lastIndex = 0;
     const xmlM = xmlRe.exec(scanText);
@@ -78,7 +75,6 @@ export function parseResponse(text: string): ParsedResponse {
       }
     }
 
-    // Fenced code block fallback
     const fencedRe = new RegExp(
       `\`\`\`${escaped}\\r?\\n([\\s\\S]*?)\\r?\\n\`\`\``,
       "g",
@@ -114,7 +110,6 @@ export function parseResponse(text: string): ParsedResponse {
   const afterMatch = text.slice(match.index + match[0].length).trim();
   const remainder = afterMatch.length > 0 ? afterMatch : undefined;
 
-  // Special UI variants
   if (toolName === "changes") {
     try {
       const parsed = JSON.parse(body) as {
@@ -142,7 +137,6 @@ export function parseResponse(text: string): ParsedResponse {
     };
   }
 
-  // Generic tool
   const tool = registry.get(toolName);
   if (!tool) return { kind: "text", content: text.trim() };
 
@@ -159,14 +153,10 @@ export function parseResponse(text: string): ParsedResponse {
   };
 }
 
-// ── Clone tag helper ──────────────────────────────────────────────────────────
-
 export function parseCloneTag(text: string): string | null {
   const m = text.match(/<clone>([\s\S]*?)<\/clone>/);
   return m ? m[1]!.trim() : null;
 }
-
-// ── GitHub URL detection ──────────────────────────────────────────────────────
 
 export function extractGithubUrl(text: string): string | null {
   const match = text.match(/https?:\/\/github\.com\/[\w.-]+\/[\w.-]+/);
@@ -178,12 +168,12 @@ export function toCloneUrl(url: string): string {
   return clean.endsWith(".git") ? clean : `${clean}.git`;
 }
 
-// ── API call ──────────────────────────────────────────────────────────────────
-
 function buildApiMessages(
   messages: Message[],
 ): { role: string; content: string }[] {
-  return messages.map((m) => {
+  const recent = messages.slice(-MAX_HISTORY);
+
+  return recent.map((m) => {
     if (m.type === "tool") {
       if (!m.approved) {
         return {
@@ -222,7 +212,7 @@ export async function callChat(
     };
     body = {
       model: provider.model,
-      max_tokens: 4096,
+      max_tokens: 16384,
       system: systemPrompt,
       messages: apiMessages,
     };
@@ -235,7 +225,7 @@ export async function callChat(
     };
     body = {
       model: provider.model,
-      max_tokens: 4096,
+      max_tokens: 16384,
       messages: [{ role: "system", content: systemPrompt }, ...apiMessages],
     };
   }

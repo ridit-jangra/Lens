@@ -1,4 +1,42 @@
 export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
+  // ── create new file directly (no read first) ──────────────────────────────
+  {
+    role: "user",
+    content: "this codebase doesn't have a readme",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "README.md", "content": "# Project\\n\\nA brief description of what this project does.\\n\\n## Getting Started\\n\\n```bash\\nbun install\\nbun run dev\\n```"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to README.md:\n\nWritten: /repo/README.md (10 lines, 128 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Done — README.md has been created.",
+  },
+  {
+    role: "user",
+    content: "write a contributing guide",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "CONTRIBUTING.md", "content": "# Contributing\\n\\nPull requests welcome. Please open an issue first to discuss major changes."}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to CONTRIBUTING.md:\n\nWritten: /repo/CONTRIBUTING.md (4 lines, 96 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Done — CONTRIBUTING.md has been written.",
+  },
+
   // ── delete / open / pdf ───────────────────────────────────────────────────
   {
     role: "user",
@@ -244,7 +282,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content: "Done — `hello.py` has been written.",
   },
 
-  // ── read before write ─────────────────────────────────────────────────────
+  // ── read before write (modifying existing file only) ─────────────────────
   {
     role: "user",
     content: "add a logout button to src/components/Header.tsx",
