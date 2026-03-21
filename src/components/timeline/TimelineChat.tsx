@@ -5,8 +5,7 @@ import type { Commit } from "../../utils/git";
 import { summarizeTimeline } from "../../utils/git";
 import type { Provider } from "../../types/config";
 import { callChat } from "../../utils/chat";
-
-const ACCENT = "#FF8C00";
+import { ACCENT } from "../../colors";
 
 type TLMessage = { role: "user" | "assistant"; content: string; type: "text" };
 

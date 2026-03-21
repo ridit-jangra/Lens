@@ -9,8 +9,6 @@ import {
 } from "fs";
 import type { FilePatch } from "../components/repo/DiffViewer";
 
-// ── Walk ──────────────────────────────────────────────────────────────────────
-
 const SKIP_DIRS = new Set([
   "node_modules",
   ".git",
@@ -60,8 +58,6 @@ export function applyPatches(repoPath: string, patches: FilePatch[]): void {
     writeFileSync(fullPath, patch.content, "utf-8");
   }
 }
-
-// ── Read ──────────────────────────────────────────────────────────────────────
 
 export function readFile(filePath: string, repoPath: string): string {
   const candidates = path.isAbsolute(filePath)
@@ -120,9 +116,7 @@ export function readFolder(folderPath: string, repoPath: string): string {
       try {
         if (statSync(full).isDirectory()) subfolders.push(`${entry}/`);
         else files.push(entry);
-      } catch {
-        // skip
-      }
+      } catch {}
     }
 
     const total = files.length + subfolders.length;
@@ -210,8 +204,6 @@ export function grepFiles(
 
   return `grep /${pattern}/ ${glob} — ${totalMatches} match(es) in ${results.length} file(s)\n\n${results.join("\n\n")}`;
 }
-
-// ── Write / Delete ────────────────────────────────────────────────────────────
 
 export function writeFile(
   filePath: string,

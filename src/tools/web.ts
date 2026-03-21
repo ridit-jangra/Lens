@@ -1,5 +1,3 @@
-// ── HTML helpers ──────────────────────────────────────────────────────────────
-
 function stripTags(html: string): string {
   return html
     .replace(/<[^>]+>/g, " ")
@@ -72,8 +70,6 @@ function extractLists(html: string): string {
     ? `=== LISTS ===\n\n${lists.slice(0, 5).join("\n\n")}`
     : "";
 }
-
-// ── Fetch ─────────────────────────────────────────────────────────────────────
 
 export async function fetchUrl(url: string): Promise<string> {
   const res = await fetch(url, {

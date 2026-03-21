@@ -1,8 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { Commit } from "../../utils/git";
-
-const ACCENT = "#FF8C00";
+import { ACCENT } from "../../colors";
 
 type Props = {
   commits: Commit[];
@@ -29,7 +28,6 @@ function formatRefs(refs: string): string {
 }
 
 function shortDate(dateStr: string): string {
-  // "2026-03-12 14:22:01 +0530" → "Mar 12"
   try {
     const d = new Date(dateStr);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -82,8 +80,7 @@ export function CommitList({
         const refs = formatRefs(commit.refs);
         const date = shortDate(commit.date);
 
-        // truncate message to fit width
-        const prefixLen = 14; // symbol + hash + date
+        const prefixLen = 14;
         const maxMsg = Math.max(10, width - prefixLen - 3);
         const msg =
           commit.message.length > maxMsg
@@ -92,22 +89,18 @@ export function CommitList({
 
         return (
           <Box key={commit.hash} paddingX={1} flexDirection="column">
-            {/* graph line above (not first) */}
             {i > 0 && (
               <Text color="gray" dimColor>
                 {"│"}
               </Text>
             )}
             <Box gap={1}>
-              {/* selection indicator */}
               <Text color={isSelected ? ACCENT : "gray"}>
                 {isSelected ? "▶" : " "}
               </Text>
 
-              {/* graph node */}
               <Text color={isSelected ? ACCENT : color}>{symbol}</Text>
 
-              {/* short hash */}
               <Text
                 color={isSelected ? "white" : "gray"}
                 dimColor={!isSelected}
@@ -115,12 +108,10 @@ export function CommitList({
                 {commit.shortHash}
               </Text>
 
-              {/* date */}
               <Text color="cyan" dimColor={!isSelected}>
                 {date}
               </Text>
 
-              {/* message */}
               <Text
                 color={isSelected ? "white" : "gray"}
                 bold={isSelected}
@@ -130,14 +121,12 @@ export function CommitList({
               </Text>
             </Box>
 
-            {/* refs on selected */}
             {isSelected && refs && (
               <Box paddingLeft={4}>
                 <Text color="yellow">{refs}</Text>
               </Box>
             )}
 
-            {/* stat summary on selected */}
             {isSelected && (
               <Box paddingLeft={4} gap={2}>
                 <Text color="gray" dimColor>
@@ -159,7 +148,6 @@ export function CommitList({
         );
       })}
 
-      {/* scroll hint */}
       <Box paddingX={1} marginTop={1}>
         <Text color="gray" dimColor>
           {scrollOffset > 0 ? "↑ more above" : ""}

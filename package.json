@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@ridit/lens-sdk": "0.1.4",
+    "asciichart": "^1.5.25",
     "commander": "^14.0.3",
     "figures": "^6.1.0",
     "ink": "^6.8.0",
@@ -31,6 +32,7 @@
     "terminal-image": "^4.2.0"
   },
   "devDependencies": {
+    "@types/asciichart": "^1.5.8",
     "@types/bun": "latest",
     "@types/react": "^19.2.14"
   },
