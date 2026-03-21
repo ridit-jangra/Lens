@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Box, Text, Static, useInput } from "ink";
+import React, { useState, useEffect, useRef } from "react";
+import { Box, Text, Static, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import { execSync } from "child_process";
 import { ProviderPicker } from "../repo/ProviderPicker";
@@ -9,14 +9,18 @@ import {
   isGitRepo,
   summarizeTimeline,
 } from "../../utils/git";
-import { callChat } from "../../utils/chat";
+import { callChat, parseResponse } from "../../utils/chat";
+import { registry } from "../../utils/tools/registry";
+import { buildGitToolsPromptSection } from "../../tools/git";
 import type { Commit, DiffFile } from "../../utils/git";
 import type { Provider } from "../../types/config";
+import type { Message } from "../../types/chat";
+import { TypewriterText, InputBox } from "../chat/ChatOverlays";
+import { ACCENT } from "../../colors";
 
-const ACCENT = "#FF8C00";
 const W = () => process.stdout.columns ?? 100;
 
-// ── git tool helpers ──────────────────────────────────────────────────────────
+// ── git runner (only used by RevertConfirm) ───────────────────────────────────
 
 function gitRun(cmd: string, cwd: string): { ok: boolean; out: string } {
   try {
@@ -34,59 +38,30 @@ function gitRun(cmd: string, cwd: string): { ok: boolean; out: string } {
   }
 }
 
-function getUnstagedDiff(cwd: string): string {
-  // includes both tracked changes and new untracked files
-  const tracked = gitRun("git diff HEAD", cwd).out;
-  const untracked = gitRun(`git ls-files --others --exclude-standard`, cwd).out;
+// ── thinking phrases ──────────────────────────────────────────────────────────
 
-  const untrackedContent = untracked
-    .split("\n")
-    .filter(Boolean)
-    .slice(0, 10)
-    .map((f) => {
-      try {
-        const content = execSync(
-          `git show :0 "${f}" 2>/dev/null || type "${f}"`,
-          {
-            cwd,
-            encoding: "utf-8",
-            stdio: ["pipe", "pipe", "pipe"],
-          },
-        )
-          .trim()
-          .slice(0, 500);
-        return `=== new file: ${f} ===\n${content}`;
-      } catch {
-        return `=== new file: ${f} ===`;
-      }
-    })
-    .join("\n\n");
+const THINKING_PHRASES = [
+  "thinking…",
+  "reading the repo…",
+  "consulting the log…",
+  "grepping the history…",
+  "diffing the vibes…",
+  "sniffing the diff...",
+  "reading your crimes...",
+  "crafting the perfect commit message...",
+  "pretending this was intentional all along...",
+  "making it sound like a feature...",
+  "turning chaos into conventional commits...",
+  "72 chars or bust...",
+  "git log will remember this...",
+  "committing to the bit. and also the repo...",
+  "staging your changes (and your career)...",
+  "making main proud...",
+  "git blame: not it...",
+];
 
-  return [tracked.slice(0, 4000), untrackedContent]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-async function generateCommitMessage(
-  provider: Provider,
-  diff: string,
-): Promise<string> {
-  const system = `You are a commit message generator. Given a git diff, write a concise, imperative commit message.
-Rules:
-- First line: short summary, max 72 chars, imperative mood ("add", "fix", "update", not "added")
-- If needed, one blank line then a short body (2-3 lines max)
-- No markdown, no bullet points, no code blocks
-- Output ONLY the commit message, nothing else`;
-
-  const msgs = [
-    {
-      role: "user" as const,
-      content: `Write a commit message for this diff:\n\n${diff}`,
-      type: "text" as const,
-    },
-  ];
-  const raw = await callChat(provider, system, msgs as any);
-  return typeof raw === "string" ? raw.trim() : "update files";
+function randomPhrase() {
+  return THINKING_PHRASES[Math.floor(Math.random() * THINKING_PHRASES.length)]!;
 }
 
 // ── tiny helpers ──────────────────────────────────────────────────────────────
@@ -387,7 +362,6 @@ function RevertConfirm({
     if (status !== "confirm") return;
     if (input === "y" || input === "Y" || key.return) {
       setStatus("running");
-      // use revert (safe — creates a new commit, doesn't rewrite history)
       const r = gitRun(`git revert --no-edit "${commit.hash}"`, repoPath);
       setResult(r.out);
       setStatus("done");
@@ -455,341 +429,407 @@ function RevertConfirm({
   );
 }
 
-// ── CommitPanel — stage + commit unstaged changes ─────────────────────────────
+// ── MsgBody ───────────────────────────────────────────────────────────────────
+// Mirrors MessageBody from ChatMessage.tsx — inline code, bold, lists, code blocks.
 
-type CommitPanelState =
-  | { phase: "scanning" }
-  | { phase: "no-changes" }
-  | { phase: "generating"; diff: string }
-  | { phase: "review"; diff: string; message: string }
-  | { phase: "editing"; diff: string; message: string }
-  | { phase: "committing"; message: string }
-  | { phase: "done"; result: string }
-  | { phase: "error"; message: string };
-
-function CommitPanel({
-  repoPath,
-  provider,
-  onDone,
-}: {
-  repoPath: string;
-  provider: Provider;
-  onDone: (msg: string | null) => void;
-}) {
-  const [state, setState] = useState<CommitPanelState>({ phase: "scanning" });
-
-  // scan + generate on mount
-  useEffect(() => {
-    const diff = getUnstagedDiff(repoPath);
-    if (!diff.trim() || diff === "(done)") {
-      setState({ phase: "no-changes" });
-      return;
-    }
-    setState({ phase: "generating", diff });
-    generateCommitMessage(provider, diff)
-      .then((msg) => setState({ phase: "review", diff, message: msg }))
-      .catch((e) => setState({ phase: "error", message: String(e) }));
-  }, []);
-
-  useInput((input, key) => {
-    if (
-      state.phase === "no-changes" ||
-      state.phase === "scanning" ||
-      state.phase === "generating"
-    ) {
-      if (key.escape || input === "n" || input === "N") onDone(null);
-      return;
-    }
-
-    if (state.phase === "review") {
-      if (input === "y" || input === "Y" || key.return) {
-        // commit
-        setState({ phase: "committing", message: state.message });
-        const add = gitRun("git add -A", repoPath);
-        if (!add.ok) {
-          setState({ phase: "error", message: add.out });
-          return;
-        }
-        const commit = gitRun(
-          `git commit -m ${JSON.stringify(state.message)}`,
-          repoPath,
-        );
-        setState({
-          phase: "done",
-          result: commit.ok ? commit.out : `Error: ${commit.out}`,
-        });
-        setTimeout(() => onDone(commit.ok ? state.message : null), 1500);
-        return;
-      }
-      if (input === "e" || input === "E") {
-        setState({
-          phase: "editing",
-          diff: state.diff,
-          message: state.message,
-        });
-        return;
-      }
-      if (input === "n" || input === "N" || key.escape) {
-        onDone(null);
-        return;
-      }
-    }
-
-    if (state.phase === "editing") {
-      if (key.escape) {
-        setState({ phase: "review", diff: state.diff, message: state.message });
-      }
-      // TextInput handles the rest
-    }
-
-    if (state.phase === "done" || state.phase === "error") {
-      if (key.return || key.escape) onDone(null);
-    }
-  });
-
-  const w = W();
-  const divider = "─".repeat(w);
-
+function InlineText({ text }: { text: string }) {
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
   return (
-    <Box flexDirection="column" marginTop={1}>
-      <Text color="gray" dimColor>
-        {divider}
-      </Text>
-      <Box paddingX={1} marginBottom={1} gap={2}>
-        <Text color={ACCENT} bold>
-          COMMIT CHANGES
-        </Text>
-      </Box>
-
-      {state.phase === "scanning" && (
-        <Box paddingX={1} gap={1}>
-          <Text color={ACCENT}>*</Text>
-          <Text color="gray" dimColor>
-            scanning for changes…
-          </Text>
-        </Box>
-      )}
-
-      {state.phase === "no-changes" && (
-        <Box paddingX={1} flexDirection="column" gap={1}>
-          <Box gap={1}>
-            <Text color="yellow">!</Text>
-            <Text color="white">no uncommitted changes found</Text>
-          </Box>
-          <Text color="gray" dimColor>
-            {" "}
-            esc to close
-          </Text>
-        </Box>
-      )}
-
-      {state.phase === "generating" && (
-        <Box paddingX={1} gap={1}>
-          <Text color={ACCENT}>*</Text>
-          <Text color="gray" dimColor>
-            generating commit message…
-          </Text>
-        </Box>
-      )}
-
-      {(state.phase === "review" || state.phase === "editing") && (
-        <Box paddingX={1} flexDirection="column" gap={1}>
-          {/* show a compact diff summary */}
-          <Box gap={1}>
-            <Text color="gray" dimColor>
-              diff preview:
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("`") && part.endsWith("`"))
+          return (
+            <Text key={i} color={ACCENT}>
+              {part.slice(1, -1)}
             </Text>
-            <Text color="gray" dimColor>
-              {trunc(state.diff.split("\n")[0] ?? "", w - 20)}
+          );
+        if (part.startsWith("**") && part.endsWith("**"))
+          return (
+            <Text key={i} bold color="white">
+              {part.slice(2, -2)}
             </Text>
-          </Box>
-          <Box gap={1} marginTop={1}>
-            <Text color="gray" dimColor>
-              message:
-            </Text>
-          </Box>
+          );
+        return (
+          <Text key={i} color="white">
+            {part}
+          </Text>
+        );
+      })}
+    </>
+  );
+}
 
-          {state.phase === "review" && (
-            <Box paddingLeft={2} flexDirection="column">
-              <Text color="white" bold wrap="wrap">
-                {state.message}
-              </Text>
-              <Box gap={3} marginTop={1}>
-                <Text color="green">y/enter commit</Text>
-                <Text color="cyan">e edit</Text>
-                <Text color="gray" dimColor>
-                  n/esc cancel
+function MsgBody({ content }: { content: string }) {
+  const segments = content.split(/(```[\s\S]*?```)/g);
+  return (
+    <Box flexDirection="column">
+      {segments.map((seg, si) => {
+        if (seg.startsWith("```")) {
+          const lines = seg.slice(3).split("\n");
+          const code = lines
+            .slice(1)
+            .join("\n")
+            .replace(/```\s*$/, "")
+            .trimEnd();
+          return (
+            <Box key={si} flexDirection="column">
+              {code.split("\n").map((line, li) => (
+                <Text key={li} color={ACCENT}>
+                  {"  "}
+                  {line}
                 </Text>
-              </Box>
+              ))}
             </Box>
-          )}
-
-          {state.phase === "editing" && (
-            <Box paddingLeft={2} flexDirection="column" gap={1}>
-              <TextInput
-                value={state.message}
-                onChange={(msg) =>
-                  setState({ phase: "editing", diff: state.diff, message: msg })
-                }
-                onSubmit={(msg) =>
-                  setState({ phase: "review", diff: state.diff, message: msg })
-                }
-              />
-              <Text color="gray" dimColor>
-                enter to confirm · esc to cancel edit
-              </Text>
-            </Box>
-          )}
-        </Box>
-      )}
-
-      {state.phase === "committing" && (
-        <Box paddingX={1} gap={1}>
-          <Text color={ACCENT}>*</Text>
-          <Text color="gray" dimColor>
-            committing…
-          </Text>
-        </Box>
-      )}
-
-      {state.phase === "done" && (
-        <Box paddingX={1} gap={1}>
-          <Text color="green">✓</Text>
-          <Text color="white" wrap="wrap">
-            {trunc(state.result, w - 6)}
-          </Text>
-        </Box>
-      )}
-
-      {state.phase === "error" && (
-        <Box paddingX={1} flexDirection="column" gap={1}>
-          <Box gap={1}>
-            <Text color="red">✗</Text>
-            <Text color="white" wrap="wrap">
-              {trunc(state.message, w - 6)}
-            </Text>
+          );
+        }
+        const lines = seg.split("\n").filter((l) => l.trim() !== "");
+        return (
+          <Box key={si} flexDirection="column">
+            {lines.map((line, li) => {
+              if (line.match(/^[-*•]\s/))
+                return (
+                  <Box key={li} gap={1}>
+                    <Text color={ACCENT}>*</Text>
+                    <InlineText text={line.slice(2).trim()} />
+                  </Box>
+                );
+              if (line.match(/^\d+\.\s/)) {
+                const num = line.match(/^(\d+)\.\s/)![1];
+                return (
+                  <Box key={li} gap={1}>
+                    <Text color="gray">{num}.</Text>
+                    <InlineText text={line.replace(/^\d+\.\s/, "").trim()} />
+                  </Box>
+                );
+              }
+              return (
+                <Box key={li}>
+                  <InlineText text={line} />
+                </Box>
+              );
+            })}
           </Box>
-          <Text color="gray" dimColor>
-            {" "}
-            enter/esc to close
-          </Text>
-        </Box>
-      )}
+        );
+      })}
     </Box>
   );
 }
 
 // ── AskPanel ──────────────────────────────────────────────────────────────────
-// No Static here — Static always floats to the top of Ink output regardless of
-// where it is placed in the tree. We use plain state arrays instead so messages
-// render in document flow, below the commit list.
+//
+// Uses the global registry + parseResponse — identical execution path to
+// ChatRunner.processResponse. Git tools come from tools/git.ts which registers
+// them into the registry at startup. No local tool definitions here.
 
-type ChatMsg =
-  | { role: "user"; content: string }
-  | { role: "assistant"; content: string }
-  | { role: "thinking" };
+type AskMsg =
+  | { kind: "user"; content: string }
+  | { kind: "assistant"; content: string }
+  | { kind: "thinking" }
+  | { kind: "image"; ansi: string }
+  | {
+      kind: "tool";
+      toolName: string;
+      label: string;
+      result?: string;
+      approved?: boolean;
+    };
+
+type PendingTool = {
+  toolName: string;
+  input: unknown;
+  rawInput: string;
+  remainder: string | undefined;
+  history: Message[];
+};
 
 function AskPanel({
   commits,
+  repoPath,
   provider,
-  onCommit,
+  onReload,
 }: {
   commits: Commit[];
+  repoPath: string;
   provider: Provider;
-  onCommit: () => void;
+  onReload: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [messages, setMessages] = useState<AskMsg[]>([]);
+  const [apiHistory, setApiHistory] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
-  const [history, setHistory] = useState<
-    { role: "user" | "assistant"; content: string; type: "text" }[]
-  >([]);
+  const [phrase, setPhrase] = useState(randomPhrase);
+  const [pending, setPending] = useState<PendingTool | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const { stdout } = useStdout();
 
-  // keywords that mean "commit my changes" in any language
-  const COMMIT_TRIGGERS = [
-    /commit/i,
-    /stage/i,
-    /push changes/i,
-    // hinglish / hindi
-    /commit kr/i,
-    /commit kar/i,
-    /changes commit/i,
-    /changes save/i,
-    /save changes/i,
-    /badlav.*commit/i,
-  ];
+  // Rotate thinking phrase while busy
+  useEffect(() => {
+    if (!thinking) return;
+    setPhrase(randomPhrase());
+    const id = setInterval(() => setPhrase(randomPhrase()), 3200);
+    return () => clearInterval(id);
+  }, [thinking]);
 
-  const systemPrompt = `You are a git history analyst embedded in a terminal git timeline viewer.
-You can ONLY answer questions about the git history shown below.
-You CANNOT run commands, execute git operations, or modify files.
-If the user asks to commit, stage, push, or make any git change — reply with exactly: DELEGATE_COMMIT
-Plain text answers only. No markdown. No code blocks. No backticks. Be concise.
+  const systemPrompt = `You are a git assistant embedded in a terminal timeline viewer.
+Repository: ${repoPath}
 
+You have access to git tools to answer questions and perform git operations.
+${buildGitToolsPromptSection()}
+
+Rules:
+- Use read tools freely to answer questions requiring live data
+- For write operations briefly explain what you are about to do before emitting the tag
+- After a tool result is returned, continue your response naturally
+- Plain text only — no markdown headers
+- Be concise
+
+Timeline summary (last 300 commits):
 ${summarizeTimeline(commits)}`;
 
-  const ask = async (q: string) => {
-    if (!q.trim() || thinking) return;
+  // ── core process loop — mirrors ChatRunner.processResponse ─────────────────
 
-    // client-side check first — catch obvious commit intents without an API call
-    if (COMMIT_TRIGGERS.some((re) => re.test(q))) {
-      setMessages((prev) => [...prev, { role: "user", content: q }]);
-      setInput("");
-      onCommit();
+  const processResponse = (
+    raw: string,
+    currentHistory: Message[],
+    signal: AbortSignal,
+  ) => {
+    if (signal.aborted) {
+      setThinking(false);
       return;
     }
 
-    const nextHistory = [
-      ...history,
-      { role: "user" as const, content: q, type: "text" as const },
-    ];
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", content: q },
-      { role: "thinking" },
-    ]);
-    setThinking(true);
-    setInput("");
-    try {
-      const raw = await callChat(provider, systemPrompt, nextHistory as any);
-      const answer = typeof raw === "string" ? raw.trim() : "(no response)";
+    const parsed = parseResponse(raw);
 
-      // model-side delegation signal
-      if (
-        answer === "DELEGATE_COMMIT" ||
-        answer.startsWith("DELEGATE_COMMIT")
-      ) {
-        setMessages((prev) => prev.filter((m) => m.role !== "thinking"));
+    // plain text
+    if (parsed.kind === "text") {
+      const clean = parsed.content.replace(/\*\*([^*]+)\*\*/g, "$1").trim();
+      setMessages((prev) => [
+        ...prev.filter((m) => m.kind !== "thinking"),
+        { kind: "assistant", content: clean },
+      ]);
+      setApiHistory([
+        ...currentHistory,
+        { role: "assistant", content: clean, type: "text" },
+      ]);
+      setThinking(false);
+      return;
+    }
+
+    // tool call
+    if (parsed.kind === "tool") {
+      const tool = registry.get(parsed.toolName);
+      if (!tool) {
         setThinking(false);
-        onCommit();
         return;
       }
 
-      // strip any accidental markdown/code blocks the model snuck in
-      const clean = answer
-        .replace(/```[\s\S]*?```/g, "")
-        .replace(/`([^`]+)`/g, "$1")
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .trim();
+      const label = tool.summariseInput
+        ? String(tool.summariseInput(parsed.input))
+        : parsed.rawInput;
 
+      if (tool.safe) {
+        // Auto-approve — keep thinking true the whole time so input stays locked.
+        // Replace the thinking bubble with preamble (if any) + tool row + new thinking bubble.
+        setMessages((prev) => [
+          ...prev.filter((m) => m.kind !== "thinking"),
+          ...(parsed.content
+            ? [{ kind: "assistant" as const, content: parsed.content }]
+            : []),
+          {
+            kind: "tool" as const,
+            toolName: parsed.toolName,
+            label,
+            approved: true,
+          },
+          { kind: "thinking" as const },
+        ]);
+        executeAndContinue(
+          {
+            toolName: parsed.toolName,
+            input: parsed.input,
+            rawInput: parsed.rawInput,
+            remainder: parsed.remainder,
+            history: currentHistory,
+          },
+          true,
+          signal,
+        );
+      } else {
+        // Write tool — stop thinking, show permission prompt, block input via pending.
+        setThinking(false);
+        setMessages((prev) => [
+          ...prev.filter((m) => m.kind !== "thinking"),
+          ...(parsed.content
+            ? [{ kind: "assistant" as const, content: parsed.content }]
+            : []),
+          { kind: "tool" as const, toolName: parsed.toolName, label },
+        ]);
+        setPending({
+          toolName: parsed.toolName,
+          input: parsed.input,
+          rawInput: parsed.rawInput,
+          remainder: parsed.remainder,
+          history: currentHistory,
+        });
+      }
+      return;
+    }
+
+    // anything else (changes, clone) — show as text in this context
+    setMessages((prev) => [
+      ...prev.filter((m) => m.kind !== "thinking"),
+      { kind: "assistant", content: raw.trim() },
+    ]);
+    setThinking(false);
+  };
+
+  const executeAndContinue = async (
+    p: PendingTool,
+    approved: boolean,
+    signal: AbortSignal,
+  ) => {
+    const tool = registry.get(p.toolName);
+    if (!tool) return;
+
+    let result = "(denied by user)";
+    let resultKind: string = "text";
+
+    if (approved) {
+      try {
+        const toolResult = await tool.execute(p.input, {
+          repoPath,
+          messages: p.history,
+        });
+        result = toolResult.value;
+        resultKind = (toolResult as any).kind ?? "text";
+      } catch (e: any) {
+        result = `Error: ${e.message}`;
+      }
+    }
+
+    // Image result — write ANSI directly to stdout (bypasses Ink's renderer)
+    // and inject an image message into the list instead of a text result.
+    if (resultKind === "image" && approved) {
+      setMessages((prev) => {
+        const next = prev
+          .map((m) =>
+            m.kind === "tool" &&
+            m.toolName === p.toolName &&
+            m.result === undefined
+              ? { ...m, result: "(image)", approved }
+              : m,
+          )
+          .filter((m) => m.kind !== "thinking");
+        return [...next, { kind: "image" as const, ansi: result }];
+      });
+      stdout.write(result + "\n");
+    } else {
+      // Stamp result onto the tool bubble and remove the trailing thinking bubble
+      // in one atomic update — no intermediate render with a dangling spinner.
+      setMessages((prev) => {
+        const next = prev
+          .map((m) =>
+            m.kind === "tool" &&
+            m.toolName === p.toolName &&
+            m.result === undefined
+              ? { ...m, result, approved }
+              : m,
+          )
+          .filter((m) => m.kind !== "thinking");
+        return next;
+      });
+    }
+
+    // reload commit list if a write succeeded
+    if (
+      approved &&
+      !result.startsWith("Error") &&
+      !result.startsWith("(denied")
+    ) {
+      onReload();
+    }
+
+    const nextHistory: Message[] = [
+      ...p.history,
+      {
+        role: "user" as const,
+        content: approved
+          ? `Tool result for <${p.toolName}>:\n${result}`
+          : `Tool <${p.toolName}> was denied by the user.`,
+        type: "text" as const,
+      },
+    ];
+    setApiHistory(nextHistory);
+
+    // if the model already wrote a remainder, process it inline
+    if (approved && p.remainder) {
+      processResponse(p.remainder, nextHistory, signal);
+      return;
+    }
+
+    // no remainder — follow-up API call.
+    // Set thinking BEFORE the stamp so isBusy never drops to false between
+    // the tool completing and the next runChat starting.
+    setThinking(true);
+    setMessages((prev) => [...prev, { kind: "thinking" }]);
+    runChat(nextHistory, signal);
+  };
+
+  const runChat = async (history: Message[], signal: AbortSignal) => {
+    try {
+      const raw = await callChat(provider, systemPrompt, history, signal);
+      if (signal.aborted) return;
+      processResponse(raw, history, signal);
+    } catch (e: any) {
+      if (e?.name === "AbortError") return;
       setMessages((prev) => [
-        ...prev.filter((m) => m.role !== "thinking"),
-        { role: "assistant", content: clean },
+        ...prev.filter((m) => m.kind !== "thinking"),
+        { kind: "assistant", content: `Error: ${String(e)}` },
       ]);
-      setHistory([
-        ...nextHistory,
-        { role: "assistant", content: clean, type: "text" },
-      ]);
-    } catch (e) {
-      setMessages((prev) => [
-        ...prev.filter((m) => m.role !== "thinking"),
-        { role: "assistant", content: `Error: ${String(e)}` },
-      ]);
-    } finally {
       setThinking(false);
     }
   };
 
+  const ask = async (q: string) => {
+    if (!q.trim() || thinking || pending !== null) return;
+
+    const userMsg: Message = { role: "user", content: q, type: "text" };
+    const nextHistory = [...apiHistory, userMsg];
+
+    // Set thinking true FIRST so isBusy blocks input before the next render
+    setThinking(true);
+    setMessages((prev) => [
+      ...prev,
+      { kind: "user", content: q },
+      { kind: "thinking" },
+    ]);
+    setApiHistory(nextHistory);
+    setInput("");
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+    await runChat(nextHistory, abort.signal);
+  };
+
+  // permission y/n — only fires when pending !== null
+  useInput((inp, key) => {
+    if (!pending) return;
+    if (inp === "y" || inp === "Y" || key.return) {
+      const p = pending;
+      setPending(null);
+      const abort = abortRef.current ?? new AbortController();
+      executeAndContinue(p, true, abort.signal);
+    } else if (inp === "n" || inp === "N" || key.escape) {
+      const p = pending;
+      setPending(null);
+      const abort = abortRef.current ?? new AbortController();
+      executeAndContinue(p, false, abort.signal);
+    }
+  });
+
   const w = W();
+  const isBusy = thinking || pending !== null;
+  const hasThinking = messages.some((m) => m.kind === "thinking");
 
   return (
     <Box flexDirection="column" marginTop={1}>
@@ -797,50 +837,120 @@ ${summarizeTimeline(commits)}`;
         {"─".repeat(w)}
       </Text>
 
-      {/* plain array render — stays in document flow below the commit list */}
+      <Box paddingX={1} marginBottom={1} gap={2}>
+        <Text color={ACCENT} bold>
+          ASK
+        </Text>
+        <Text color="gray" dimColor>
+          git tools available · y/n for writes · esc back
+        </Text>
+      </Box>
+
       {messages.map((msg, i) => {
-        if (msg.role === "thinking")
+        // ── thinking ────────────────────────────────────────────────────
+        if (msg.kind === "thinking") {
+          // Only render the last thinking bubble; use phrase state directly
+          const lastIdx = messages.map((m) => m.kind).lastIndexOf("thinking");
+          if (i !== lastIdx) return null;
           return (
-            <Box key={i} paddingX={1} gap={1}>
-              <Text color={ACCENT}>*</Text>
-              <Text color="gray" dimColor>
-                thinking…
+            <Box key="thinking" gap={1} marginBottom={1}>
+              <Text color={ACCENT}>●</Text>
+              <TypewriterText key={phrase} text={phrase} />
+            </Box>
+          );
+        }
+
+        // ── user ────────────────────────────────────────────────────────
+        if (msg.kind === "user") {
+          return (
+            <Box
+              key={i}
+              marginBottom={1}
+              gap={1}
+              backgroundColor="#1a1a1a"
+              paddingLeft={1}
+              paddingRight={2}
+            >
+              <Text color="gray">{">"}</Text>
+              <Text color="white" bold>
+                {msg.content}
               </Text>
             </Box>
           );
-        if (msg.role === "user")
+        }
+
+        // ── tool ────────────────────────────────────────────────────────
+        if (msg.kind === "tool") {
+          const isDone = msg.result !== undefined;
+          const denied = msg.approved === false;
+          const isError = msg.result?.startsWith("Error") || denied;
+          const tool = registry.get(msg.toolName);
+          const isWrite = tool && !tool.safe;
           return (
-            <Box key={i} paddingX={1} gap={1}>
-              <Text color="gray">{">"}</Text>
-              <Text color="white">{msg.content}</Text>
+            <Box key={i} flexDirection="column" marginBottom={1}>
+              <Box gap={1}>
+                <Text color={denied ? "red" : ACCENT}>$</Text>
+                <Text color={denied ? "red" : "gray"} dimColor={!denied}>
+                  {trunc(msg.label, w - 4)}
+                </Text>
+                {denied && <Text color="red">denied</Text>}
+              </Box>
+              {!isDone && isWrite && (
+                <Box marginLeft={2} gap={1}>
+                  <Text color="gray">y/enter allow · n/esc deny</Text>
+                </Box>
+              )}
+              {isDone && msg.result && (
+                <Box marginLeft={2}>
+                  <Text color={isError ? "red" : "gray"} dimColor={!isError}>
+                    {trunc(msg.result.split("\n")[0]!, w - 6)}
+                    {(msg.result.split("\n")[0]?.length ?? 0) > w - 6
+                      ? "…"
+                      : ""}
+                  </Text>
+                </Box>
+              )}
             </Box>
           );
+        }
+
+        // ── image ────────────────────────────────────────────────────────
+        // Already written to stdout raw — just show a placeholder label so
+        // the message list stays coherent and the image appears above it.
+        if (msg.kind === "image") {
+          return (
+            <Box key={i} gap={1} marginBottom={1}>
+              <Text color={ACCENT}>◎</Text>
+              <Text color="gray" dimColor>
+                image rendered above
+              </Text>
+            </Box>
+          );
+        }
+
+        // ── assistant ───────────────────────────────────────────────────
         return (
-          <Box key={i} paddingX={1} gap={1} marginBottom={1}>
-            <Text color={ACCENT}>{"*"}</Text>
-            <Text color="white" wrap="wrap">
-              {msg.content}
-            </Text>
+          <Box key={i} marginBottom={1} gap={1}>
+            <Text color={ACCENT}>●</Text>
+            <MsgBody content={msg.content} />
           </Box>
         );
       })}
 
-      {/* input always at the bottom of the panel */}
-      <Box paddingX={1} gap={1}>
-        <Text color={ACCENT}>{"?"}</Text>
-        {!thinking ? (
-          <TextInput
-            value={input}
-            onChange={setInput}
-            onSubmit={ask}
-            placeholder="ask about the history…"
-          />
-        ) : (
-          <Text color="gray" dimColor>
-            thinking…
-          </Text>
-        )}
-      </Box>
+      {pending && (
+        <Box marginLeft={2} gap={1} marginBottom={1}>
+          <Text color="gray">y/enter allow · n/esc deny</Text>
+        </Box>
+      )}
+
+      <InputBox
+        value={input}
+        onChange={setInput}
+        onSubmit={(v) => {
+          if (v.trim()) ask(v.trim());
+        }}
+        inputKey={isBusy ? 1 : 0}
+      />
     </Box>
   );
 }
@@ -851,8 +961,7 @@ type UIMode =
   | { type: "browse" }
   | { type: "search"; query: string }
   | { type: "ask" }
-  | { type: "revert"; commit: Commit }
-  | { type: "commit" };
+  | { type: "revert"; commit: Commit };
 
 type StatusMsg = { id: number; text: string; ok: boolean };
 let sid = 0;
@@ -964,12 +1073,7 @@ export function TimelineRunner({
       else process.exit(0);
     }
 
-    // overlays consume all input except ctrl+c
-    if (
-      mode.type === "ask" ||
-      mode.type === "revert" ||
-      mode.type === "commit"
-    ) {
+    if (mode.type === "ask" || mode.type === "revert") {
       if (key.escape) setMode({ type: "browse" });
       return;
     }
@@ -979,7 +1083,6 @@ export function TimelineRunner({
       return;
     }
 
-    // diff open
     if (showDiff) {
       if (key.escape || input === "d") {
         setShowDiff(false);
@@ -1012,25 +1115,18 @@ export function TimelineRunner({
       setMode({ type: "search", query: "" });
       return;
     }
-    if (input === "?") {
+    if (input === "?" || input === "a" || input === "A") {
       setMode({ type: "ask" });
       return;
     }
-    if (input === "c" || input === "C") {
-      setMode({ type: "commit" });
-      return;
-    }
-
     if (key.return && selected) {
       setShowDiff(true);
       return;
     }
-
     if (input === "x" || input === "X") {
       if (selected) setMode({ type: "revert", commit: selected });
       return;
     }
-
     if (key.upArrow) {
       const next = Math.max(0, selectedIdx - 1);
       setSelectedIdx(next);
@@ -1038,7 +1134,6 @@ export function TimelineRunner({
       if (next < scrollOffset) setScrollOffset(next);
       return;
     }
-
     if (key.downArrow) {
       const next = Math.min(filtered.length - 1, selectedIdx + 1);
       setSelectedIdx(next);
@@ -1069,7 +1164,6 @@ export function TimelineRunner({
   const isSearching = mode.type === "search";
   const isAsking = mode.type === "ask";
   const isReverting = mode.type === "revert";
-  const isCommitting = mode.type === "commit";
   const searchQuery = isSearching ? mode.query : "";
   const visible = filtered.slice(scrollOffset, scrollOffset + visibleCount);
 
@@ -1078,10 +1172,10 @@ export function TimelineRunner({
     : isSearching
       ? "type to filter · enter confirm · esc cancel"
       : isAsking
-        ? "type question · enter send · esc close"
-        : isReverting || isCommitting
-          ? "see prompt above · esc cancel"
-          : `↑↓ navigate · enter diff · x revert · c commit · / search · ? ask${onExit ? " · q back" : " · ^C exit"}`;
+        ? "ask anything · git tools available · esc back"
+        : isReverting
+          ? "y confirm · n/esc cancel"
+          : `↑↓ navigate · enter diff · x revert · a ask · / search${onExit ? " · q back" : " · ^C exit"}`;
 
   return (
     <Box flexDirection="column">
@@ -1101,7 +1195,7 @@ export function TimelineRunner({
         )}
       </Box>
 
-      {/* status messages (Static — no re-render) */}
+      {/* status messages */}
       <Static items={statusMsgs}>
         {(msg) => (
           <Box key={msg.id} paddingX={1} gap={1}>
@@ -1167,21 +1261,8 @@ export function TimelineRunner({
             if (msg) {
               addStatus(msg, true);
               reloadCommits();
-            } else addStatus("revert cancelled", false);
-          }}
-        />
-      )}
-
-      {/* commit overlay */}
-      {isCommitting && provider && (
-        <CommitPanel
-          repoPath={repoPath}
-          provider={provider}
-          onDone={(msg) => {
-            setMode({ type: "browse" });
-            if (msg) {
-              addStatus(`committed: ${trunc(msg, 60)}`, true);
-              reloadCommits();
+            } else {
+              addStatus("revert cancelled", false);
             }
           }}
         />
@@ -1191,9 +1272,11 @@ export function TimelineRunner({
       {isAsking && provider && (
         <AskPanel
           commits={commits}
+          repoPath={repoPath}
           provider={provider}
-          onCommit={() => {
-            setMode({ type: "commit" });
+          onReload={() => {
+            reloadCommits();
+            addStatus("commits reloaded", true);
           }}
         />
       )}

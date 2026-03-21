@@ -11,9 +11,11 @@ import {
   deleteFile,
   deleteFolder,
   generatePdf,
+  viewImageTool,
+  registerGitTools,
+  chartDataTool,
+  convertImageTool,
 } from "../../tools";
-
-// ── fetch ─────────────────────────────────────────────────────────────────────
 
 export const fetchTool: Tool<string> = {
   name: "fetch",
@@ -37,8 +39,6 @@ export const fetchTool: Tool<string> = {
   },
 };
 
-// ── shell ─────────────────────────────────────────────────────────────────────
-
 export const shellTool: Tool<string> = {
   name: "shell",
   description: "run a terminal command",
@@ -53,8 +53,6 @@ export const shellTool: Tool<string> = {
     return { kind: "text", value };
   },
 };
-
-// ── read-file ─────────────────────────────────────────────────────────────────
 
 export const readFileTool: Tool<string> = {
   name: "read-file",
@@ -71,8 +69,6 @@ export const readFileTool: Tool<string> = {
   }),
 };
 
-// ── read-folder ───────────────────────────────────────────────────────────────
-
 export const readFolderTool: Tool<string> = {
   name: "read-folder",
   description: "list contents of a folder (files + subfolders, one level deep)",
@@ -87,8 +83,6 @@ export const readFolderTool: Tool<string> = {
     value: readFolder(folderPath, ctx.repoPath),
   }),
 };
-
-// ── grep ──────────────────────────────────────────────────────────────────────
 
 interface GrepInput {
   pattern: string;
@@ -116,8 +110,6 @@ export const grepTool: Tool<GrepInput> = {
     value: grepFiles(pattern, glob, ctx.repoPath),
   }),
 };
-
-// ── write-file ────────────────────────────────────────────────────────────────
 
 interface WriteFileInput {
   path: string;
@@ -147,8 +139,6 @@ export const writeFileTool: Tool<WriteFileInput> = {
   }),
 };
 
-// ── delete-file ───────────────────────────────────────────────────────────────
-
 export const deleteFileTool: Tool<string> = {
   name: "delete-file",
   description: "permanently delete a single file",
@@ -163,8 +153,6 @@ export const deleteFileTool: Tool<string> = {
     value: deleteFile(filePath, ctx.repoPath),
   }),
 };
-
-// ── delete-folder ─────────────────────────────────────────────────────────────
 
 export const deleteFolderTool: Tool<string> = {
   name: "delete-folder",
@@ -181,8 +169,6 @@ export const deleteFolderTool: Tool<string> = {
   }),
 };
 
-// ── open-url ──────────────────────────────────────────────────────────────────
-
 export const openUrlTool: Tool<string> = {
   name: "open-url",
   description: "open a URL in the user's default browser",
@@ -194,8 +180,6 @@ export const openUrlTool: Tool<string> = {
   summariseInput: (url) => url,
   execute: (url) => ({ kind: "text", value: openUrl(url) }),
 };
-
-// ── generate-pdf ──────────────────────────────────────────────────────────────
 
 interface GeneratePdfInput {
   filePath: string;
@@ -231,8 +215,6 @@ export const generatePdfTool: Tool<GeneratePdfInput> = {
   }),
 };
 
-// ── search ────────────────────────────────────────────────────────────────────
-
 export const searchTool: Tool<string> = {
   name: "search",
   description: "search the internet for anything you are unsure about",
@@ -255,8 +237,6 @@ export const searchTool: Tool<string> = {
   },
 };
 
-// ── clone ─────────────────────────────────────────────────────────────────────
-
 export const cloneTool: Tool<string> = {
   name: "clone",
   description: "clone a GitHub repo so you can explore and discuss it",
@@ -266,15 +246,11 @@ export const cloneTool: Tool<string> = {
     `### ${i}. clone — clone a GitHub repo so you can explore and discuss it\n<clone>https://github.com/owner/repo</clone>`,
   parseInput: (body) => body.replace(/^<|>$/g, "").trim() || null,
   summariseInput: (url) => url,
-  // Clone is handled specially by ChatRunner (it triggers a UI flow),
-  // so execute here is just a fallback that should never run.
   execute: (repoUrl) => ({
     kind: "text",
     value: `Clone of ${repoUrl} was handled by the UI.`,
   }),
 };
-
-// ── changes ───────────────────────────────────────────────────────────────────
 
 export interface ChangesInput {
   summary: string;
@@ -296,14 +272,11 @@ export const changesTool: Tool<ChangesInput> = {
     }
   },
   summariseInput: ({ summary }) => summary,
-  // changes is handled specially by ChatRunner (diff preview UI).
   execute: ({ summary }) => ({
     kind: "text",
     value: `Changes proposed: ${summary}`,
   }),
 };
-
-// ── registerBuiltins ──────────────────────────────────────────────────────────
 
 import { registry } from "./registry";
 
@@ -321,4 +294,8 @@ export function registerBuiltins(): void {
   registry.register(searchTool);
   registry.register(cloneTool);
   registry.register(changesTool);
+  registry.register(viewImageTool);
+  registry.register(chartDataTool);
+  registry.register(convertImageTool);
+  registerGitTools();
 }

@@ -1,8 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { Commit, DiffFile } from "../../utils/git";
-
-const ACCENT = "#FF8C00";
+import { ACCENT } from "../../colors";
 
 type Props = {
   commit: Commit | null;
@@ -73,7 +72,6 @@ export function CommitDetail({
 
   const divider = "─".repeat(Math.max(0, width - 2));
 
-  // Build all diff lines for scrolling
   const allDiffLines: Array<{
     type: string;
     content: string;
@@ -177,7 +175,7 @@ export function CommitDetail({
       {/* stats bar */}
       <Box paddingX={1} marginTop={1} gap={3}>
         <Text color="green">+{commit.insertions} insertions</Text>
-        <Text color="red">-{commit.deletions} deletions</Text>
+        <Text color="red">-{commit.deletions}</Text>
         <Text color="gray" dimColor>
           {commit.filesChanged} file{commit.filesChanged !== 1 ? "s" : ""}{" "}
           changed
