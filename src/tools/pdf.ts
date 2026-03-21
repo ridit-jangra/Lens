@@ -1,12 +1,13 @@
+// Generates PDFs from markdown content — useful for exporting codebase reports and documentation.
+
 import path from "path";
-import os from "os";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 
-export function generatePdf(
+export async function generatePdf(
   filePath: string,
   content: string,
   repoPath: string,
-): string {
+): Promise<string> {
   const fullPath = path.isAbsolute(filePath)
     ? filePath
     : path.join(repoPath, filePath);
@@ -15,91 +16,148 @@ export function generatePdf(
     const dir = path.dirname(fullPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-    const escaped = content
-      .replace(/\\/g, "\\\\")
-      .replace(/"""/g, '\\"\\"\\"')
-      .replace(/\r/g, "");
+    const PDFDocument = require("pdfkit");
+    const doc = new PDFDocument({ margin: 72 });
+    const chunks: Buffer[] = [];
 
-    const script = `
-import sys
-try:
-    from reportlab.lib.pagesizes import letter
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.lib import colors
-except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "reportlab", "--break-system-packages", "-q"])
-    from reportlab.lib.pagesizes import letter
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.lib import colors
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
 
-doc = SimpleDocTemplate(
-    r"""${fullPath}""",
-    pagesize=letter,
-    rightMargin=inch,
-    leftMargin=inch,
-    topMargin=inch,
-    bottomMargin=inch,
-)
+    return new Promise((resolve) => {
+      doc.on("end", () => {
+        try {
+          writeFileSync(fullPath, Buffer.concat(chunks));
+          resolve(`PDF generated: ${fullPath}`);
+        } catch (err) {
+          resolve(
+            `Error writing PDF: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      });
 
-styles = getSampleStyleSheet()
-styles.add(ParagraphStyle(name="H1", parent=styles["Heading1"], fontSize=22, spaceAfter=10))
-styles.add(ParagraphStyle(name="H2", parent=styles["Heading2"], fontSize=16, spaceAfter=8))
-styles.add(ParagraphStyle(name="H3", parent=styles["Heading3"], fontSize=13, spaceAfter=6))
-styles.add(ParagraphStyle(name="Body", parent=styles["Normal"], fontSize=11, leading=16, spaceAfter=8))
-styles.add(ParagraphStyle(name="Bullet", parent=styles["Normal"], fontSize=11, leading=16, leftIndent=20, spaceAfter=4, bulletIndent=10))
+      doc.on("error", (err: Error) => {
+        resolve(`Error generating PDF: ${err.message}`);
+      });
 
-raw = """${escaped}"""
+      const lines = content.split("\n");
+      let firstElement = true;
 
-story = []
-for line in raw.split("\\n"):
-    s = line.rstrip()
-    if s.startswith("### "):
-        story.append(Paragraph(s[4:], styles["H3"]))
-    elif s.startswith("## "):
-        story.append(Spacer(1, 6))
-        story.append(Paragraph(s[3:], styles["H2"]))
-        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.grey, spaceAfter=4))
-    elif s.startswith("# "):
-        story.append(Paragraph(s[2:], styles["H1"]))
-        story.append(HRFlowable(width="100%", thickness=1, color=colors.black, spaceAfter=6))
-    elif s.startswith("- ") or s.startswith("* "):
-        story.append(Paragraph(u"\\u2022  " + s[2:], styles["Bullet"]))
-    elif s.startswith("---"):
-        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.grey, spaceAfter=4))
-    elif s == "":
-        story.append(Spacer(1, 6))
-    else:
-        import re
-        s = re.sub(r"\\*\\*(.+?)\\*\\*", r"<b>\\1</b>", s)
-        s = re.sub(r"\\*(.+?)\\*", r"<i>\\1</i>", s)
-        s = re.sub(r"\`(.+?)\`", r"<font name='Courier'>\\1</font>", s)
-        story.append(Paragraph(s, styles["Body"]))
+      const addSpacingBefore = () => {
+        if (!firstElement) doc.moveDown(0.5);
+        firstElement = false;
+      };
 
-doc.build(story)
-print("OK")
-`
-      .replace("${fullPath}", fullPath.replace(/\\/g, "/"))
-      .replace("${escaped}", escaped);
+      const bullets: string[] = [];
 
-    const tmpFile = path.join(os.tmpdir(), `lens_pdf_${Date.now()}.py`);
-    writeFileSync(tmpFile, script, "utf-8");
+      const flushBullets = () => {
+        if (bullets.length === 0) return;
+        addSpacingBefore();
+        for (const bullet of bullets) {
+          doc
+            .fontSize(11)
+            .fillColor("#333333")
+            .text(`• ${bullet}`, { indent: 20, lineGap: 3 });
+        }
+        bullets.length = 0;
+      };
 
-    const { execSync } =
-      require("child_process") as typeof import("child_process");
-    execSync(`python "${tmpFile}"`, { stdio: "pipe" });
+      for (const raw of lines) {
+        const line = raw.trimEnd();
 
-    try {
-      require("fs").unlinkSync(tmpFile);
-    } catch {
-      /* ignore */
-    }
+        if (line.startsWith("# ")) {
+          flushBullets();
+          addSpacingBefore();
+          doc
+            .fontSize(22)
+            .fillColor("#000000")
+            .font("Helvetica-Bold")
+            .text(line.slice(2));
+          doc.moveDown(0.2);
+          doc
+            .moveTo(72, doc.y)
+            .lineTo(doc.page.width - 72, doc.y)
+            .strokeColor("#000000")
+            .lineWidth(1)
+            .stroke();
+          doc.moveDown(0.4);
+          doc.font("Helvetica");
+        } else if (line.startsWith("## ")) {
+          flushBullets();
+          addSpacingBefore();
+          doc
+            .fontSize(16)
+            .fillColor("#111111")
+            .font("Helvetica-Bold")
+            .text(line.slice(3));
+          doc.moveDown(0.2);
+          doc
+            .moveTo(72, doc.y)
+            .lineTo(doc.page.width - 72, doc.y)
+            .strokeColor("#999999")
+            .lineWidth(0.5)
+            .stroke();
+          doc.moveDown(0.3);
+          doc.font("Helvetica");
+        } else if (line.startsWith("### ")) {
+          flushBullets();
+          addSpacingBefore();
+          doc
+            .fontSize(13)
+            .fillColor("#222222")
+            .font("Helvetica-Bold")
+            .text(line.slice(4));
+          doc.font("Helvetica");
+        } else if (line.startsWith("- ") || line.startsWith("* ")) {
+          bullets.push(line.slice(2));
+        } else if (line.startsWith("---")) {
+          flushBullets();
+          doc.moveDown(0.5);
+          doc
+            .moveTo(72, doc.y)
+            .lineTo(doc.page.width - 72, doc.y)
+            .strokeColor("#cccccc")
+            .lineWidth(0.5)
+            .stroke();
+          doc.moveDown(0.5);
+        } else if (line === "") {
+          flushBullets();
+        } else {
+          flushBullets();
+          addSpacingBefore();
+          // handle inline bold (**text**) and inline code (`text`)
+          const segments = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+          let isFirst = true;
+          for (const seg of segments) {
+            if (seg.startsWith("**") && seg.endsWith("**")) {
+              doc
+                .fontSize(11)
+                .fillColor("#333333")
+                .font("Helvetica-Bold")
+                .text(seg.slice(2, -2), { continued: true, lineGap: 3 });
+              doc.font("Helvetica");
+            } else if (seg.startsWith("`") && seg.endsWith("`")) {
+              doc
+                .fontSize(10)
+                .fillColor("#c0392b")
+                .font("Courier")
+                .text(seg.slice(1, -1), { continued: true, lineGap: 3 });
+              doc.font("Helvetica").fontSize(11).fillColor("#333333");
+            } else if (seg.length > 0) {
+              doc
+                .fontSize(11)
+                .fillColor("#333333")
+                .font("Helvetica")
+                .text(seg, { continued: true, lineGap: 3 });
+            }
+            isFirst = false;
+          }
+          // end the continued text
+          doc.text("", { continued: false });
+        }
+      }
 
-    return `PDF generated: ${fullPath}`;
+      flushBullets();
+      doc.end();
+    });
   } catch (err) {
     return `Error generating PDF: ${err instanceof Error ? err.message : String(err)}`;
   }

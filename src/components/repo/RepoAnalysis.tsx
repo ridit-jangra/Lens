@@ -7,7 +7,7 @@ import { writeFileSync } from "fs";
 import path from "path";
 import { ACCENT } from "../../colors";
 import { requestFileList, analyzeRepo } from "../../utils/ai";
-import { ProviderPicker } from "./ProviderPicker";
+import { ProviderPicker } from "../provider/ProviderPicker";
 import { PreviewRunner } from "./PreviewRunner";
 import { IssueFixer } from "./IssueFixer";
 import { writeLensFile } from "../../utils/lensfile";

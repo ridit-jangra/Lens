@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import { ACCENT } from "../../colors";
+import { ACCENT, GREEN, RED } from "../../colors";
 import type { Message } from "../../types/chat";
 
 function InlineText({ text }: { text: string }) {
@@ -149,11 +149,11 @@ export function StaticMessage({ msg }: { msg: Message }) {
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Box gap={1}>
-          <Text color={msg.approved ? ACCENT : "red"}>{icon}</Text>
-          <Text color={msg.approved ? "gray" : "red"} dimColor={!msg.approved}>
+          <Text color={msg.approved ? ACCENT : RED}>{icon}</Text>
+          <Text color={msg.approved ? "gray" : RED} dimColor={!msg.approved}>
             {label}
           </Text>
-          {!msg.approved && <Text color="red">denied</Text>}
+          {!msg.approved && <Text color={RED}>denied</Text>}
         </Box>
         {msg.approved && msg.result && (
           <Box marginLeft={2}>
@@ -175,10 +175,10 @@ export function StaticMessage({ msg }: { msg: Message }) {
           <MessageBody content={msg.content} />
         </Box>
         <Box marginLeft={2} gap={1}>
-          <Text color={msg.applied ? "green" : "gray"}>
+          <Text color={msg.applied ? GREEN : "gray"}>
             {msg.applied ? "✓" : "·"}
           </Text>
-          <Text color={msg.applied ? "green" : "gray"} dimColor={!msg.applied}>
+          <Text color={msg.applied ? GREEN : "gray"} dimColor={!msg.applied}>
             {msg.applied ? "changes applied" : "changes skipped"}
           </Text>
         </Box>

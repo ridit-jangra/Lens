@@ -8,7 +8,7 @@ import path from "path";
 import { ACCENT } from "../../colors";
 import { callModelRaw } from "../../utils/ai";
 import { DiffViewer, buildDiffs } from "../repo/DiffViewer";
-import { ProviderPicker } from "../repo/ProviderPicker";
+import { ProviderPicker } from "../provider/ProviderPicker";
 import type { DiffLine, FilePatch } from "../repo/DiffViewer";
 import type { Provider } from "../../types/config";
 import type { ImportantFile } from "../../types/repo";

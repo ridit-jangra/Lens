@@ -1,13 +1,15 @@
-import { Box, Text, useInput, type Key } from "ink";
+import { Box, Text, useInput } from "ink";
+import TextInput from "ink-text-input";
 import { useState } from "react";
 import { execSync } from "child_process";
 import type { ProviderType } from "../../types/config";
+import { ACCENT, TEXT } from "../../colors";
 
 const LABELS: Record<ProviderType, string> = {
   anthropic: "Anthropic API key",
   gemini: "Gemini API key",
   openai: "OpenAI API key",
-  ollama: "Ollama base URL (default: http://localhost:11434)",
+  ollama: "Ollama base URL",
   custom: "API key",
 };
 
@@ -38,184 +40,139 @@ function readClipboard(): string | null {
 type CustomResult = { apiKey: string; baseUrl?: string };
 type Field = "apiKey" | "baseUrl";
 
-const useFieldInput = (initial: string, onPasteError: (v: boolean) => void) => {
-  const [value, setValue] = useState(initial);
+const SimpleInput = ({
+  providerType,
+  onSubmit,
+  onBack,
+}: {
+  providerType: Exclude<ProviderType, "custom">;
+  onSubmit: (value: string) => void;
+  onBack?: () => void;
+}) => {
+  const isPassword = providerType !== "ollama";
+  const [value, setValue] = useState(
+    providerType === "ollama" ? "http://localhost:11434" : "",
+  );
 
-  const handle = (input: string, key: Key) => {
-    if (key.backspace || key.delete) {
-      setValue((v) => v.slice(0, -1));
-      onPasteError(false);
+  useInput((input, key) => {
+    if (key.escape) {
+      onBack?.();
       return;
     }
     if (key.ctrl && input === "v") {
       const clip = readClipboard();
-      if (clip) {
-        setValue((v) => v + clip);
-        onPasteError(false);
-      } else onPasteError(true);
-      return;
+      if (clip) setValue((v) => v + clip);
     }
-    if (key.ctrl && input === "a") {
-      setValue("");
-      return;
-    }
-    if (!key.ctrl && !key.meta && input) {
-      setValue((v) => v + input);
-      onPasteError(false);
-    }
-  };
-
-  return { value, setValue, handle };
-};
-
-const SimpleInput = ({
-  providerType,
-  onSubmit,
-  onSkip,
-}: {
-  providerType: Exclude<ProviderType, "custom">;
-  onSubmit: (value: string) => void;
-  onSkip?: () => void;
-}) => {
-  const [pasteError, setPasteError] = useState(false);
-  const isPassword = providerType !== "ollama";
-  const { value, handle } = useFieldInput(
-    providerType === "ollama" ? "http://localhost:11434" : "",
-    setPasteError,
-  );
-
-  useInput((input, key) => {
-    if (key.return) {
-      if (value.trim()) onSubmit(value.trim());
-      return;
-    }
-    if (key.escape && onSkip) {
-      onSkip();
-      return;
-    }
-    handle(input, key);
   });
-
-  const display = isPassword ? "•".repeat(value.length) : value;
 
   return (
     <Box flexDirection="column" gap={1}>
-      <Text bold color="cyan">
-        {LABELS[providerType]}
-      </Text>
+      <Text color={TEXT}>{LABELS[providerType]}</Text>
       <Box borderStyle="round" borderColor="gray" paddingX={1}>
-        <Text>{display || " "}</Text>
+        <TextInput
+          value={value}
+          onChange={setValue}
+          onSubmit={(v) => {
+            if (v.trim()) onSubmit(v.trim());
+          }}
+          mask={isPassword ? "*" : undefined}
+          placeholder={
+            providerType === "ollama" ? "http://localhost:11434" : ""
+          }
+        />
       </Box>
-      {pasteError ? (
-        <Text color="red">⚠ Could not read clipboard</Text>
-      ) : (
-        <Text color="gray">
-          enter to confirm · ctrl+v to paste · ctrl+a to clear
-          {onSkip ? " · esc to skip" : ""}
-        </Text>
-      )}
+      <Text color="gray">
+        enter to confirm · ctrl+v to paste{onBack ? " · esc back" : ""}
+      </Text>
     </Box>
   );
 };
 
 const CustomInput = ({
   onSubmit,
-  onSkip,
+  onBack,
 }: {
   onSubmit: (result: CustomResult) => void;
-  onSkip?: () => void;
+  onBack?: () => void;
 }) => {
   const [activeField, setActiveField] = useState<Field>("apiKey");
-  const [pasteError, setPasteError] = useState(false);
-
-  const apiKeyField = useFieldInput("", setPasteError);
-  const baseUrlField = useFieldInput("", setPasteError);
-
-  const active = activeField === "apiKey" ? apiKeyField : baseUrlField;
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
 
   useInput((input, key) => {
-    if (key.escape && onSkip) {
-      onSkip();
+    if (key.escape) {
+      onBack?.();
       return;
     }
-
     if (key.tab) {
       setActiveField((f) => (f === "apiKey" ? "baseUrl" : "apiKey"));
-      setPasteError(false);
       return;
     }
-
-    if (key.return) {
-      if (activeField === "apiKey" && apiKeyField.value.trim()) {
-        setActiveField("baseUrl");
-        return;
-      }
-      if (activeField === "baseUrl" && apiKeyField.value.trim()) {
-        onSubmit({
-          apiKey: apiKeyField.value.trim(),
-          baseUrl: baseUrlField.value.trim() || undefined,
-        });
-        return;
+    if (key.ctrl && input === "v") {
+      const clip = readClipboard();
+      if (clip) {
+        if (activeField === "apiKey") setApiKey((v) => v + clip);
+        else setBaseUrl((v) => v + clip);
       }
     }
-
-    active.handle(input, key);
   });
 
-  const fields: {
-    id: Field;
-    label: string;
-    password: boolean;
-    placeholder: string;
-  }[] = [
-    { id: "apiKey", label: "API key", password: true, placeholder: "sk-..." },
+  const fields: { id: Field; label: string; placeholder: string }[] = [
+    { id: "apiKey", label: "API key", placeholder: "sk-..." },
     {
       id: "baseUrl",
-      label: "Base URL",
-      password: false,
+      label: "Base URL (optional)",
       placeholder: "https://api.example.com/v1",
     },
   ];
 
   return (
     <Box flexDirection="column" gap={1}>
-      <Text bold color="cyan">
-        Custom provider
-      </Text>
-
-      {fields.map(({ id, label, password, placeholder }) => {
+      {fields.map(({ id, label, placeholder }) => {
         const isActive = activeField === id;
-        const val = id === "apiKey" ? apiKeyField.value : baseUrlField.value;
-        const display = password ? "•".repeat(val.length) : val;
-
+        const val = id === "apiKey" ? apiKey : baseUrl;
         return (
           <Box key={id} flexDirection="column" gap={0}>
-            <Text color={isActive ? "cyan" : "gray"}>
+            <Text color={isActive ? ACCENT : "gray"}>
               {isActive ? "›" : " "} {label}
-              {id === "baseUrl" ? " (optional)" : ""}
             </Text>
             <Box
               borderStyle="round"
-              borderColor={isActive ? "cyan" : "gray"}
+              borderColor={isActive ? ACCENT : "gray"}
               paddingX={1}
             >
-              <Text color={val ? "white" : "gray"}>
-                {display || placeholder}
-              </Text>
+              {isActive ? (
+                <TextInput
+                  value={val}
+                  onChange={id === "apiKey" ? setApiKey : setBaseUrl}
+                  onSubmit={() => {
+                    if (id === "apiKey" && apiKey.trim()) {
+                      setActiveField("baseUrl");
+                    } else if (id === "baseUrl" && apiKey.trim()) {
+                      onSubmit({
+                        apiKey: apiKey.trim(),
+                        baseUrl: baseUrl.trim() || undefined,
+                      });
+                    }
+                  }}
+                  mask={id === "apiKey" ? "*" : undefined}
+                  placeholder={placeholder}
+                />
+              ) : (
+                <Text color={val ? "white" : "gray"}>
+                  {id === "apiKey" && val
+                    ? "*".repeat(val.length)
+                    : val || placeholder}
+                </Text>
+              )}
             </Box>
           </Box>
         );
       })}
-
-      {pasteError ? (
-        <Text color="red">⚠ Could not read clipboard</Text>
-      ) : (
-        <Text color="gray">
-          enter to next field · tab to switch · ctrl+v to paste · ctrl+a to
-          clear
-          {onSkip ? " · esc to skip" : ""}
-        </Text>
-      )}
+      <Text color="gray">
+        enter to next · tab to switch · ctrl+v to paste
+        {onBack ? " · esc back" : ""}
+      </Text>
     </Box>
   );
 };
@@ -223,21 +180,20 @@ const CustomInput = ({
 export const ApiKeyStep = ({
   providerType,
   onSubmit,
-  onSkip,
+  onBack,
 }: {
   providerType: ProviderType;
   onSubmit: (value: string | CustomResult) => void;
-  onSkip?: () => void;
+  onBack?: () => void;
 }) => {
   if (providerType === "custom") {
-    return <CustomInput onSubmit={onSubmit} onSkip={onSkip} />;
+    return <CustomInput onSubmit={onSubmit} onBack={onBack} />;
   }
-
   return (
     <SimpleInput
       providerType={providerType}
       onSubmit={onSubmit}
-      onSkip={onSkip}
+      onBack={onBack}
     />
   );
 };

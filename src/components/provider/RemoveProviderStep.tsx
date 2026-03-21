@@ -3,6 +3,7 @@ import figures from "figures";
 import { useState } from "react";
 import { loadConfig, saveConfig } from "../../utils/config";
 import type { Provider } from "../../types/config";
+import { RED, TEXT } from "../../colors";
 
 export const RemoveProviderStep = ({ onDone }: { onDone: () => void }) => {
   const config = loadConfig();
@@ -38,7 +39,7 @@ export const RemoveProviderStep = ({ onDone }: { onDone: () => void }) => {
   if (providers.length === 0) {
     return (
       <Box marginTop={1}>
-        <Text color="gray">{figures.info} No providers configured.</Text>
+        <Text color="gray">No providers configured.</Text>
       </Box>
     );
   }
@@ -48,8 +49,8 @@ export const RemoveProviderStep = ({ onDone }: { onDone: () => void }) => {
   if (confirming && selected) {
     return (
       <Box flexDirection="column" gap={1} marginTop={1}>
-        <Text color="red">
-          {figures.warning} Remove <Text bold>{selected.name}</Text>? (y/n)
+        <Text color={RED}>
+          {figures.warning} Remove <Text>{selected.name}</Text>? (y/n)
         </Text>
       </Box>
     );
@@ -57,17 +58,15 @@ export const RemoveProviderStep = ({ onDone }: { onDone: () => void }) => {
 
   return (
     <Box flexDirection="column" gap={1} marginTop={1}>
-      <Text bold color="cyan">
-        Remove a provider
-      </Text>
+      <Text color={TEXT}>Remove a provider</Text>
       {providers.map((p, i) => {
         const isSelected = i === index;
         return (
           <Box key={p.id} marginLeft={1}>
-            <Text color={isSelected ? "red" : "white"}>
+            <Text color={isSelected ? RED : "white"}>
               {isSelected ? figures.arrowRight : " "}
               {"  "}
-              <Text bold={isSelected}>{p.name}</Text>
+              <Text>{p.name}</Text>
               <Text color="gray">
                 {"  "}
                 {p.type} · {p.model}

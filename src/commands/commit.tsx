@@ -5,9 +5,10 @@ import { execSync } from "child_process";
 import { existsSync } from "fs";
 import path from "path";
 import figures from "figures";
-import { ACCENT } from "../colors";
-import { ProviderPicker } from "../components/repo/ProviderPicker";
+import { ACCENT, GREEN, RED, CYAN } from "../colors";
+import { ProviderPicker } from "../components/provider/ProviderPicker";
 import { callChat } from "../utils/chat";
+import { useThinkingPhrase } from "../utils/thinking";
 import type { Provider } from "../types/config";
 import type { Message } from "../types/chat";
 
@@ -27,12 +28,6 @@ function gitRun(cmd: string, cwd: string): { ok: boolean; out: string } {
   }
 }
 
-/**
- * Commit with a multi-line message correctly.
- * Uses execFileSync with an args array — no shell, no quoting issues.
- * Splits the message into paragraphs and passes each as a separate -m flag
- * so git formats the commit body properly (blank line between subject and body).
- */
 function gitCommit(message: string, cwd: string): { ok: boolean; out: string } {
   const { execFileSync } =
     require("child_process") as typeof import("child_process");
@@ -62,13 +57,11 @@ function gitCommit(message: string, cwd: string): { ok: boolean; out: string } {
   }
 }
 
-/** Stage specific files or everything (-A) */
 function stageFiles(
   files: string[],
   cwd: string,
 ): { ok: boolean; out: string } {
   if (files.length === 0) return gitRun("git add -A", cwd);
-
   const paths = files.map((f) => `"${f}"`).join(" ");
   return gitRun(`git add -- ${paths}`, cwd);
 }
@@ -77,7 +70,6 @@ function getStagedDiff(cwd: string): string {
   return gitRun("git diff --staged", cwd).out;
 }
 
-/** Diff only the specified files (unstaged) */
 function getFileDiff(files: string[], cwd: string): string {
   if (files.length === 0) {
     const tracked = gitRun("git diff HEAD", cwd).out;
@@ -101,7 +93,6 @@ function hasAnyChanges(cwd: string): boolean {
   return gitRun("git status --porcelain", cwd).out.trim().length > 0;
 }
 
-/** Validate that all specified files exist on disk */
 function validateFiles(
   files: string[],
   cwd: string,
@@ -186,22 +177,6 @@ function trunc(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
-const PHRASES = [
-  "reading your crimes…",
-  "sniffing the diff…",
-  "crafting the perfect message…",
-  "turning chaos into conventional commits…",
-  "pretending this was intentional…",
-  "72 chars or bust…",
-  "making main proud…",
-  "git blame: not it…",
-  "this commit brought to you by AI…",
-];
-
-function randomPhrase() {
-  return PHRASES[Math.floor(Math.random() * PHRASES.length)]!;
-}
-
 type Phase =
   | { type: "checking" }
   | { type: "no-changes" }
@@ -227,22 +202,18 @@ function CommitRunner({
 }: {
   cwd: string;
   provider: Provider;
-  /** Specific files to stage. Empty = all (-A when --auto, or use existing staged) */
   files: string[];
   auto: boolean;
   preview: boolean;
   push: boolean;
-  /** Show preview even with --auto before committing */
   confirm: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>({ type: "checking" });
-  const [phraseText, setPhraseText] = useState(randomPhrase());
-
-  useEffect(() => {
-    if (phase.type !== "generating") return;
-    const id = setInterval(() => setPhraseText(randomPhrase()), 2800);
-    return () => clearInterval(id);
-  }, [phase.type]);
+  const phraseText = useThinkingPhrase(
+    phase.type === "generating",
+    "commit",
+    2800,
+  );
 
   useEffect(() => {
     (async () => {
@@ -260,7 +231,6 @@ function CommitRunner({
           });
           return;
         }
-
         setPhase({ type: "staging", files: valid });
         const r = stageFiles(valid, cwd);
         if (!r.ok) {
@@ -403,7 +373,7 @@ function CommitRunner({
           {cwd}
         </Text>
         {files.length > 0 && (
-          <Text color="cyan" dimColor>
+          <Text color={CYAN} dimColor>
             {files.length} file{files.length !== 1 ? "s" : ""}
           </Text>
         )}
@@ -490,9 +460,7 @@ function CommitRunner({
       {phase.type === "generating" && (
         <Box gap={1} marginTop={1}>
           <Text color={ACCENT}>●</Text>
-          <Text color="gray" dimColor>
-            {phraseText}
-          </Text>
+          <Text color="gray">{phraseText}</Text>
         </Box>
       )}
 
@@ -513,7 +481,6 @@ function CommitRunner({
               </Text>
             ))}
           </Box>
-
           {phase.splitGroups.length > 0 && (
             <Box flexDirection="column" marginLeft={2} marginBottom={1}>
               <Text color="yellow" dimColor>
@@ -528,13 +495,12 @@ function CommitRunner({
               ))}
             </Box>
           )}
-
           <Text color="gray" dimColor>
             {div}
           </Text>
           <Box gap={3} marginTop={1}>
-            <Text color="green">y/enter commit</Text>
-            <Text color="cyan">e edit</Text>
+            <Text color={GREEN}>y/enter commit</Text>
+            <Text color={CYAN}>e edit</Text>
             <Text color="gray" dimColor>
               n/esc cancel
             </Text>
@@ -587,7 +553,7 @@ function CommitRunner({
       {phase.type === "pushing" && (
         <Box flexDirection="column" marginTop={1} gap={1}>
           <Box gap={2}>
-            <Text color="green">{figures.tick}</Text>
+            <Text color={GREEN}>{figures.tick}</Text>
             <Text color={ACCENT}>{phase.hash}</Text>
             <Text color="white">
               {trunc(phase.message.split("\n")[0]!, 65)}
@@ -605,7 +571,7 @@ function CommitRunner({
       {phase.type === "done" && (
         <Box flexDirection="column" marginTop={1} gap={1}>
           <Box gap={2}>
-            <Text color="green">{figures.tick}</Text>
+            <Text color={GREEN}>{figures.tick}</Text>
             <Text color={ACCENT}>{phase.hash}</Text>
             <Text color="white" bold>
               {trunc(phase.message.split("\n")[0]!, 65)}
@@ -622,7 +588,7 @@ function CommitRunner({
             ))}
           {phase.pushed && (
             <Box gap={2} marginTop={1}>
-              <Text color="green">{figures.tick}</Text>
+              <Text color={GREEN}>{figures.tick}</Text>
               <Text color="gray" dimColor>
                 pushed to remote
               </Text>
@@ -655,7 +621,7 @@ function CommitRunner({
       {phase.type === "error" && (
         <Box flexDirection="column" marginTop={1} gap={1}>
           <Box gap={1}>
-            <Text color="red">{figures.cross}</Text>
+            <Text color={RED}>{figures.cross}</Text>
             <Text color="white">{phase.message.split("\n")[0]}</Text>
           </Box>
           {phase.message
@@ -695,7 +661,7 @@ export function CommitCommand({
   if (!existsSync(cwd)) {
     return (
       <Box marginTop={1}>
-        <Text color="red">
+        <Text color={RED}>
           {figures.cross} path not found: {cwd}
         </Text>
       </Box>

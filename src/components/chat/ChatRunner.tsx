@@ -4,9 +4,10 @@ import Spinner from "ink-spinner";
 import { useState, useRef } from "react";
 import path from "path";
 import os from "os";
+import TextInput from "ink-text-input";
 import { ACCENT } from "../../colors";
 import { buildDiffs } from "../repo/DiffViewer";
-import { ProviderPicker } from "../repo/ProviderPicker";
+import { ProviderPicker } from "../provider/ProviderPicker";
 import { fetchFileTree, readImportantFiles } from "../../utils/files";
 import { startCloneRepo } from "../../utils/repo";
 import { useThinkingPhrase } from "../../utils/thinking";
@@ -194,8 +195,6 @@ function ForceAllWarning({
     </Box>
   );
 }
-
-import TextInput from "ink-text-input";
 
 export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const [stage, setStage] = useState<ChatStage>({ type: "picking-provider" });

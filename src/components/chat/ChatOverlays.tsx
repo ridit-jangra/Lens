@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Static, Text } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
-import { ACCENT } from "../../colors";
+import { ACCENT, GREEN, RED } from "../../colors";
 import { DiffViewer } from "../repo/DiffViewer";
 import { StaticMessage } from "./ChatMessage";
 import type { DiffLine, FilePatch } from "../repo/DiffViewer";
@@ -199,9 +199,9 @@ export function ShortcutBar({
         enter send · ^v paste · ^c exit
       </Text>
       {forceApprove ? (
-        <Text color="red">⚡⚡ force-all</Text>
+        <Text color={RED}>⚡⚡ force-all</Text>
       ) : (
-        <Text color={autoApprove ? "green" : "gray"} dimColor={!autoApprove}>
+        <Text color={autoApprove ? GREEN : "gray"} dimColor={!autoApprove}>
           {autoApprove ? "⚡ auto" : "/auto"}
         </Text>
       )}
@@ -289,7 +289,7 @@ export function CloneDoneView({
       <History committed={committed} />
       <Box flexDirection="column" marginY={1}>
         <Box gap={1}>
-          <Text color="green">✓</Text>
+          <Text color={GREEN}>✓</Text>
           <Text color="white" bold>
             {repoName}
           </Text>
@@ -315,8 +315,8 @@ export function CloneErrorView({
       <History committed={committed} />
       <Box flexDirection="column" marginY={1}>
         <Box gap={1}>
-          <Text color="red">✗</Text>
-          <Text color="red">{stage.message}</Text>
+          <Text color={RED}>✗</Text>
+          <Text color={RED}>{stage.message}</Text>
         </Box>
         <Hint text="  enter/esc continue" />
       </Box>
@@ -347,10 +347,10 @@ export function PreviewView({
       <Box flexDirection="column" marginLeft={2} marginTop={1}>
         {patches.map((p) => (
           <Box key={p.path} gap={1}>
-            <Text color={p.isNew ? "green" : "yellow"}>
+            <Text color={p.isNew ? GREEN : "yellow"}>
               {p.isNew ? "+" : "~"}
             </Text>
-            <Text color={p.isNew ? "green" : "yellow"}>{p.path}</Text>
+            <Text color={p.isNew ? GREEN : "yellow"}>{p.path}</Text>
             {p.isNew && (
               <Text color="gray" dimColor>
                 new
