@@ -74,18 +74,26 @@ program
     "--auto",
     "Stage all changes (or the given files) and commit without confirmation",
   )
+  .option("--confirm", "Show preview before committing even when using --auto")
   .option("--preview", "Show the generated message without committing")
   .option("--push", "Push to remote after committing")
   .action(
     (
       files: string[],
-      opts: { path: string; auto: boolean; preview: boolean; push: boolean },
+      opts: {
+        path: string;
+        auto: boolean;
+        confirm: boolean;
+        preview: boolean;
+        push: boolean;
+      },
     ) => {
       render(
         <CommitCommand
           path={opts.path}
           files={files ?? []}
           auto={opts.auto ?? false}
+          confirm={opts.confirm ?? false}
           preview={opts.preview ?? false}
           push={opts.push ?? false}
         />,
