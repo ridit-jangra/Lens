@@ -30,33 +30,33 @@ npm install -g @ridit/lens
 ## CLI Commands
 
 ```
-lens chat                        chat with your codebase
-lens chat -p /path/to/repo       chat in a specific repo
+lens chat / vibe                        chat with your codebase
+lens chat -p /path/to/repo              chat in a specific repo
 
-lens review                      AI review of the current directory
-lens review /path/to/repo        AI review of a specific repo
+lens review / judge                     AI review of the current directory
+lens review /path/to/repo               AI review of a specific repo
 
-lens repo <url>                  analyze a remote GitHub repository
+lens repo / stalk <url>                 analyze a remote GitHub repository
 
-lens task <text>                 apply a natural language change to the codebase
-lens task <text> -p /path        apply change to a specific repo
+lens task / cook <text>                 apply a natural language change to the codebase
+lens task / cook <text> -p /path        apply change to a specific repo
 
-lens commit                      generate a smart commit message from staged changes
-lens commit [files...]           stage specific files and generate a commit message
-lens commit --auto               stage all changes and commit without confirmation
-lens commit --confirm            show preview before committing when using --auto
-lens commit --preview            show the generated message without committing
-lens commit --push               push to remote after committing
+lens commit / crimes                    generate a smart commit message from staged changes
+lens commit / crimes [files...]         stage specific files and generate a commit message
+lens commit / crimes --auto             stage all changes and commit without confirmation
+lens commit / crimes --confirm          show preview before committing when using --auto
+lens commit / crimes --preview          show the generated message without committing
+lens commit / crimes --push             push to remote after committing
 
-lens timeline                    explore commit history
-lens timeline -p /path           explore history of a specific repo
+lens timeline / history                 explore commit history
+lens timeline / history -p /path        explore history of a specific repo
 
-lens provider                    configure AI providers
+lens provider                           configure AI providers
 ```
 
 ## Chat Commands
 
-Once inside a `lens chat` session, use slash commands:
+Once inside a `lens chat / vibe` session, use slash commands:
 
 ```
 /timeline              browse commit history
@@ -79,7 +79,7 @@ Once inside a `lens chat` session, use slash commands:
 - **Anthropic** — Claude models
 - **OpenAI** — GPT models
 - **Gemini** — Google Gemini models
-- **Ollama** — local models
+- **Ollama** — local models (free, fully offline)
 - **Custom** — any OpenAI-compatible API endpoint
 
 ## Extending Lens

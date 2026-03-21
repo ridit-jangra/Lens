@@ -18,7 +18,8 @@ await loadAddons();
 const program = new Command();
 
 program
-  .command("repo <url>")
+  .command("stalk <url>")
+  .alias("repo")
   .description("Analyze a remote repository")
   .action((url) => {
     render(<RepoCommand url={url} />);
@@ -32,14 +33,16 @@ program
   });
 
 program
-  .command("review [path]")
+  .command("judge [path]")
+  .alias("review")
   .description("Review a local codebase")
   .action((inputPath) => {
     render(<ReviewCommand path={inputPath ?? "."} />);
   });
 
 program
-  .command("task <text>")
+  .command("cook <text>")
+  .alias("task")
   .description("Apply a natural language change to the codebase")
   .option("-p, --path <path>", "Path to the repo", ".")
   .action((text: string, opts: { path: string }) => {
@@ -47,7 +50,8 @@ program
   });
 
 program
-  .command("chat")
+  .command("vibe")
+  .alias("chat")
   .description("Chat with your codebase — ask questions or make changes")
   .option("-p, --path <path>", "Path to the repo", ".")
   .action((opts: { path: string }) => {
@@ -55,7 +59,8 @@ program
   });
 
 program
-  .command("timeline")
+  .command("history")
+  .alias("timeline")
   .description(
     "Explore your code history — see commits, changes, and evolution",
   )
@@ -65,7 +70,8 @@ program
   });
 
 program
-  .command("commit [files...]")
+  .command("crimes [files...]")
+  .alias("commit")
   .description(
     "Generate a smart conventional commit message from staged changes or specific files",
   )
