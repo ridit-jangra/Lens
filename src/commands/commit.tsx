@@ -146,19 +146,26 @@ Rules:
 - Use conventional commits format: type(scope): description
 - Types: feat, fix, refactor, perf, docs, style, test, chore, ci, build
 - First line: max 72 chars, imperative mood (add, fix, update — not added/fixed)
-- After the first line, add a blank line then bullet points for each logical change
+- Only add a body (bullet points) if the change is complex or touches multiple unrelated areas
+- If the change is small or obvious from the subject line, output ONLY the first line — no body
+- When a body is needed: add a blank line then 2–4 bullets max, only for non-obvious details
 - Bullet format: "- <what changed and why>"
-- Group related changes into 2–5 bullets max
+- Skip bullets that just restate the subject line or describe trivial version bumps
 - Be specific — mention file names, feature names, component names
 - No markdown, no backticks, no code blocks
 - Output ONLY the commit message, nothing else
 
-Example output:
-feat(editor): add syntax highlighting for TypeScript
+Examples of good short commits:
+chore: bump version to 0.1.6
+fix(parser): handle null input in parseResponse
+docs: update README installation steps
 
-- add Monaco tokenizer for .ts and .tsx files
-- configure theme tokens to match dark mode palette
-- expose highlight API for external extensions`;
+Examples of when to add a body:
+feat(chat): add persistent memory across sessions
+
+- store memories in ~/.lens/memories per repo
+- inject memory summary into system prompt on load
+- expose /memory commands for manual management`;
 
 async function generateCommitMessage(
   provider: Provider,

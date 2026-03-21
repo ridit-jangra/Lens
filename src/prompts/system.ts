@@ -160,4 +160,10 @@ You have exactly thirteen tools. To use a tool you MUST wrap it in the exact XML
 ### 13. changes — propose code edits (shown as a diff for user approval)
 <changes>
 {"summary": "what changed and why", "patches": [{"path": "src/foo.ts", "content": "COMPLETE file content", "isNew": false}]}
-</changes>`;
+</changes>
+
+### 14. read-files — read multiple files from the repo at once
+<read-files>
+["src/foo.ts", "src/bar.ts"]
+</read-files>
+`;

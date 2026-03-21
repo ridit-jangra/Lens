@@ -471,4 +471,68 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     role: "assistant",
     content: "Done — README.md updated with a full description of Lens.",
   },
+  {
+    role: "user",
+    content: "read src/index.ts and src/app.ts",
+  },
+  {
+    role: "assistant",
+    content: '<read-files>\n["src/index.ts", "src/app.ts"]\n</read-files>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from read-files of src/index.ts, src/app.ts:\n\n=== src/index.ts ===\nFile: src/index.ts (10 lines)\n\n// content...\n\n=== src/app.ts ===\nFile: src/app.ts (20 lines)\n\n// content...\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Read both files. Here's what I found...",
+  },
+  // ── update an existing file ───────────────────────────────────────────────
+  {
+    role: "user",
+    content: "update LENS.md",
+  },
+  {
+    role: "assistant",
+    content: "<read-file>LENS.md</read-file>",
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from read-file of LENS.md:\n\nFile: LENS.md (33 lines)\n\n# Lens Analysis\n\n## Overview\nA CLI tool for codebase analysis.\n\n## Important Folders\n- src/components\n- src/utils\n\n## Suggestions\n- Add tests\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "LENS.md", "content": "# Lens Analysis\\n\\n## Overview\\nA CLI tool for AI-powered codebase analysis, built with React and Ink.\\n\\n## Important Folders\\n- src/components — UI components rendered in the terminal\\n- src/utils — tools, chat, memory, and registry utilities\\n\\n## Suggestions\\n- Add tests\\n- Add more providers\\n- Improve error handling"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to LENS.md:\n\nWritten: /repo/LENS.md (15 lines, 420 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Done — LENS.md updated.",
+  },
+  // ── do not re-call tools after a result ───────────────────────────────────
+  {
+    role: "user",
+    content:
+      "Here is the output from my-tool:\n\nsome result text\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Done — the tool returned: some result text",
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from echo:\n\nhello world\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Done — echoed: hello world",
+  },
 ];
