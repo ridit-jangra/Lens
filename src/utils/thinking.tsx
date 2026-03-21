@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const PHRASES: Record<string, string[]> = {
   general: [
@@ -311,11 +311,23 @@ export function useThinkingPhrase(
   const [index, setIndex] = useState(() =>
     Math.floor(Math.random() * list.length),
   );
+  const usedRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     if (!active) return;
-    setIndex((i) => pick(list, i));
-    const id = setInterval(() => setIndex((i) => pick(list, i)), intervalMs);
+
+    const pickUnused = () => {
+      if (usedRef.current.size >= list.length) usedRef.current.clear();
+      let next;
+      do {
+        next = Math.floor(Math.random() * list.length);
+      } while (usedRef.current.has(next));
+      usedRef.current.add(next);
+      return next;
+    };
+
+    setIndex(pickUnused());
+    const id = setInterval(() => setIndex(pickUnused()), intervalMs);
     return () => clearInterval(id);
   }, [active, kind, intervalMs]);
 
