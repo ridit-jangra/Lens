@@ -17,6 +17,8 @@ import {
   convertImageTool,
 } from "../../tools";
 
+const cleanBody = (body: string) => body.trim().replace(/\\/g, "/");
+
 export const fetchTool: Tool<string> = {
   name: "fetch",
   description: "load a URL",
@@ -61,7 +63,7 @@ export const readFileTool: Tool<string> = {
   permissionLabel: "read",
   systemPromptEntry: (i) =>
     `### ${i}. read-file — read a file from the repo\n<read-file>src/foo.ts</read-file>`,
-  parseInput: (body) => body || null,
+  parseInput: (body) => cleanBody(body) || null,
   summariseInput: (p) => p,
   execute: (filePath, ctx) => ({
     kind: "text",
@@ -76,7 +78,7 @@ export const readFolderTool: Tool<string> = {
   permissionLabel: "folder",
   systemPromptEntry: (i) =>
     `### ${i}. read-folder — list contents of a folder (files + subfolders, one level deep)\n<read-folder>src/components</read-folder>`,
-  parseInput: (body) => body || null,
+  parseInput: (body) => cleanBody(body) || null,
   summariseInput: (p) => p,
   execute: (folderPath, ctx) => ({
     kind: "text",
@@ -98,7 +100,10 @@ export const grepTool: Tool<GrepInput> = {
     `### ${i}. grep — search for a pattern across files in the repo (cross-platform, no shell needed)\n<grep>\n{"pattern": "ChatRunner", "glob": "src/**/*.tsx"}\n</grep>`,
   parseInput: (body) => {
     try {
-      const parsed = JSON.parse(body) as { pattern: string; glob?: string };
+      const parsed = JSON.parse(cleanBody(body)) as {
+        pattern: string;
+        glob?: string;
+      };
       return { pattern: parsed.pattern, glob: parsed.glob ?? "**/*" };
     } catch {
       return { pattern: body, glob: "**/*" };
@@ -127,7 +132,7 @@ export const writeFileTool: Tool<WriteFileInput> = {
     try {
       const parsed = JSON.parse(body) as { path: string; content: string };
       if (!parsed.path) return null;
-      return parsed;
+      return { ...parsed, path: parsed.path.replace(/\\/g, "/") };
     } catch {
       return null;
     }
@@ -146,7 +151,7 @@ export const deleteFileTool: Tool<string> = {
   permissionLabel: "delete",
   systemPromptEntry: (i) =>
     `### ${i}. delete-file — permanently delete a single file\n<delete-file>src/old-component.tsx</delete-file>`,
-  parseInput: (body) => body || null,
+  parseInput: (body) => cleanBody(body) || null,
   summariseInput: (p) => p,
   execute: (filePath, ctx) => ({
     kind: "text",
@@ -161,7 +166,7 @@ export const deleteFolderTool: Tool<string> = {
   permissionLabel: "delete folder",
   systemPromptEntry: (i) =>
     `### ${i}. delete-folder — permanently delete a folder and all its contents\n<delete-folder>src/legacy</delete-folder>`,
-  parseInput: (body) => body || null,
+  parseInput: (body) => cleanBody(body) || null,
   summariseInput: (p) => p,
   execute: (folderPath, ctx) => ({
     kind: "text",
@@ -195,7 +200,7 @@ export const generatePdfTool: Tool<GeneratePdfInput> = {
     `### ${i}. generate-pdf — generate a PDF file from markdown-style content\n<generate-pdf>\n{"path": "output/report.pdf", "content": "# Title\\n\\nSome body text."}\n</generate-pdf>`,
   parseInput: (body) => {
     try {
-      const parsed = JSON.parse(body) as {
+      const parsed = JSON.parse(cleanBody(body)) as {
         path?: string;
         filePath?: string;
         content?: string;
@@ -266,7 +271,7 @@ export const changesTool: Tool<ChangesInput> = {
     `### ${i}. changes — propose code edits (shown as a diff for user approval)\n<changes>\n{"summary": "what changed and why", "patches": [{"path": "src/foo.ts", "content": "COMPLETE file content", "isNew": false}]}\n</changes>`,
   parseInput: (body) => {
     try {
-      return JSON.parse(body) as ChangesInput;
+      return JSON.parse(cleanBody(body)) as ChangesInput;
     } catch {
       return null;
     }
@@ -291,8 +296,7 @@ export const readFilesTool: Tool<ReadFilesInput> = {
     `### ${i}. read-files — read multiple files from the repo at once\n<read-files>\n["src/foo.ts", "src/bar.ts"]\n</read-files>`,
   parseInput: (body) => {
     try {
-      const cleaned = body.trim().replace(/\\/g, "/");
-      const parsed = JSON.parse(cleaned) as string[];
+      const parsed = JSON.parse(cleanBody(body)) as string[];
       if (!Array.isArray(parsed) || parsed.length === 0) return null;
       return { paths: parsed };
     } catch {
