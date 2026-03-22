@@ -369,11 +369,9 @@ function CommitRunner({
         <Text color={ACCENT} bold>
           ◈ COMMIT
         </Text>
-        <Text color="gray" dimColor>
-          {cwd}
-        </Text>
+        <Text color="gray">{cwd}</Text>
         {files.length > 0 && (
-          <Text color={CYAN} dimColor>
+          <Text color={CYAN}>
             {files.length} file{files.length !== 1 ? "s" : ""}
           </Text>
         )}
@@ -383,32 +381,26 @@ function CommitRunner({
         <Box flexDirection="column" marginBottom={1}>
           {files.map((f, i) => (
             <Box key={i} gap={1}>
-              <Text color="gray" dimColor>
-                {"  ·"}
-              </Text>
+              <Text color="gray">{"  ·"}</Text>
               <Text color="white">{f}</Text>
             </Box>
           ))}
         </Box>
       )}
 
-      <Text color="gray" dimColor>
-        {div}
-      </Text>
+      <Text color="gray">{div}</Text>
 
       {phase.type === "checking" && (
         <Box gap={1} marginTop={1}>
           <Text color={ACCENT}>*</Text>
-          <Text color="gray" dimColor>
-            checking changes…
-          </Text>
+          <Text color="gray">checking changes…</Text>
         </Box>
       )}
 
       {phase.type === "staging" && (
         <Box gap={1} marginTop={1}>
           <Text color={ACCENT}>*</Text>
-          <Text color="gray" dimColor>
+          <Text color="gray">
             {phase.files.length > 0
               ? `staging ${phase.files.length} file${phase.files.length !== 1 ? "s" : ""}…`
               : "staging all changes…"}
@@ -433,11 +425,9 @@ function CommitRunner({
           </Box>
           {phase.hasUnstaged && (
             <Box flexDirection="column" marginLeft={2} gap={1}>
-              <Text color="gray" dimColor>
-                you have unstaged changes. try:
-              </Text>
+              <Text color="gray">you have unstaged changes. try:</Text>
               {phase.files.length > 0 ? (
-                <Text color="gray" dimColor>
+                <Text color="gray">
                   {"  "}
                   <Text color={ACCENT}>
                     lens commit {phase.files.join(" ")}
@@ -445,7 +435,7 @@ function CommitRunner({
                   {"  "}(stages and commits those files)
                 </Text>
               ) : (
-                <Text color="gray" dimColor>
+                <Text color="gray">
                   {"  "}
                   <Text color={ACCENT}>git add {"<files>"}</Text>
                   {"  "}or{"  "}
@@ -483,27 +473,23 @@ function CommitRunner({
           </Box>
           {phase.splitGroups.length > 0 && (
             <Box flexDirection="column" marginLeft={2} marginBottom={1}>
-              <Text color="yellow" dimColor>
+              <Text color="yellow">
                 ⚡ large diff — consider splitting into{" "}
                 {phase.splitGroups.length} commits:
               </Text>
               {phase.splitGroups.map((g, i) => (
-                <Text key={i} color="gray" dimColor>
+                <Text key={i} color="gray">
                   {"  · "}
                   {g}
                 </Text>
               ))}
             </Box>
           )}
-          <Text color="gray" dimColor>
-            {div}
-          </Text>
+          <Text color="gray">{div}</Text>
           <Box gap={3} marginTop={1}>
             <Text color={GREEN}>y/enter commit</Text>
             <Text color={CYAN}>e edit</Text>
-            <Text color="gray" dimColor>
-              n/esc cancel
-            </Text>
+            <Text color="gray">n/esc cancel</Text>
           </Box>
         </Box>
       )}
@@ -534,9 +520,7 @@ function CommitRunner({
                 )
               }
             />
-            <Text color="gray" dimColor>
-              enter confirm · esc back
-            </Text>
+            <Text color="gray">enter confirm · esc back</Text>
           </Box>
         </Box>
       )}
@@ -544,9 +528,7 @@ function CommitRunner({
       {phase.type === "committing" && (
         <Box gap={1} marginTop={1}>
           <Text color={ACCENT}>*</Text>
-          <Text color="gray" dimColor>
-            committing…
-          </Text>
+          <Text color="gray">committing…</Text>
         </Box>
       )}
 
@@ -561,9 +543,7 @@ function CommitRunner({
           </Box>
           <Box gap={1} marginLeft={2}>
             <Text color={ACCENT}>*</Text>
-            <Text color="gray" dimColor>
-              pushing…
-            </Text>
+            <Text color="gray">pushing…</Text>
           </Box>
         </Box>
       )}
@@ -582,21 +562,17 @@ function CommitRunner({
             .slice(2)
             .filter(Boolean)
             .map((line, i) => (
-              <Text key={i} color="gray" dimColor>
+              <Text key={i} color="gray">
                 {line}
               </Text>
             ))}
           {phase.pushed && (
             <Box gap={2} marginTop={1}>
               <Text color={GREEN}>{figures.tick}</Text>
-              <Text color="gray" dimColor>
-                pushed to remote
-              </Text>
+              <Text color="gray">pushed to remote</Text>
             </Box>
           )}
-          <Text color="gray" dimColor>
-            press any key to exit
-          </Text>
+          <Text color="gray">press any key to exit</Text>
         </Box>
       )}
 
@@ -612,9 +588,7 @@ function CommitRunner({
               </Text>
             ))}
           </Box>
-          <Text color="gray" dimColor>
-            (preview only — not committed)
-          </Text>
+          <Text color="gray">(preview only — not committed)</Text>
         </Box>
       )}
 
@@ -628,7 +602,7 @@ function CommitRunner({
             .split("\n")
             .slice(1)
             .map((line, i) => (
-              <Text key={i} color="gray" dimColor>
+              <Text key={i} color="gray">
                 {line}
               </Text>
             ))}
