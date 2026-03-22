@@ -1,5 +1,5 @@
 export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
-  // ── create new file directly (no read first) ──────────────────────────────
+  // ── create new file directly ──────────────────────────────────────────────
   {
     role: "user",
     content: "this codebase doesn't have a readme",
@@ -7,7 +7,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "assistant",
     content:
-      '<write-file>\n{"path": "README.md", "content": "# Project\\n\\nA brief description of what this project does.\\n\\n## Getting Started\\n\\n```bash\\nbun install\\nbun run dev\\n```"}\n</write-file>',
+      '<write-file>\n{"path": "README.md", "content": "# Project\\n\\nA brief description.\\n\\n## Getting Started\\n\\n```bash\\nbun install\\nbun run dev\\n```"}\n</write-file>',
   },
   {
     role: "user",
@@ -19,85 +19,117 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content: "Done — README.md has been created.",
   },
 
-  // ── expand existing file (read first, then write) ─────────────────────────
+  // ── fix a single file (read once, write once, done) ───────────────────────
   {
     role: "user",
-    content: "add more information to the README",
+    content: "fix the bug in addons/clean-cache.js",
   },
   {
     role: "assistant",
-    content: "<read-file>README.md</read-file>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from read-file of README.md:\n\nFile: README.md (10 lines)\n\n# Project\n\nA brief description.\n\n## Getting Started\n\n```bash\nbun install\n```\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      '<write-file>\n{"path": "README.md", "content": "# Project\\n\\nA brief description.\\n\\n## Getting Started\\n\\n```bash\\nbun install\\nbun run dev\\n```\\n\\n## Features\\n\\n- Feature one\\n- Feature two\\n\\n## Contributing\\n\\nPull requests welcome."}\n</write-file>',
+    content: "<read-file>addons/clean-cache.js</read-file>",
   },
   {
     role: "user",
     content:
-      "Here is the output from write-file to README.md:\n\nWritten: /repo/README.md (20 lines, 280 bytes)\n\nPlease continue your response based on this output.",
+      'Here is the output from read-file of addons/clean-cache.js:\n\nFile: addons/clean-cache.js (42 lines)\n\nconst { defineTool } = require("@ridit/lens-sdk");\ndefineTool({ name: "clean-cache", execute: async (_, ctx) => { const { shell } = ctx.tools; await shell("rm -rf node_modules"); } });\n\nPlease continue your response based on this output.',
   },
   {
     role: "assistant",
-    content: "Done — README.md updated with more detail.",
+    content:
+      '<write-file>\n{"path": "addons/clean-cache.js", "content": "const { defineTool } = require(\\"@ridit/lens-sdk\\");\\nconst { execSync } = require(\\"child_process\\");\\n\\ndefineTool({\\n  name: \\"clean-cache\\",\\n  description: \\"Clean node_modules and bun cache\\",\\n  safe: false,\\n  permissionLabel: \\"Clean cache\\",\\n  systemPromptEntry: () => \\"<clean-cache>{}</clean-cache> — clean node_modules and bun cache\\",\\n  parseInput: () => ({}),\\n  summariseInput: () => \\"clean cache\\",\\n  execute: async (_, ctx) => {\\n    try {\\n      execSync(\\"rm -rf node_modules\\", { cwd: ctx.repoPath, stdio: \\"pipe\\" });\\n      return { kind: \\"text\\", value: \\"Cache cleaned!\\" };\\n    } catch (err) {\\n      return { kind: \\"error\\", value: err.message };\\n    }\\n  },\\n});"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to addons/clean-cache.js:\n\nWritten: /repo/addons/clean-cache.js (20 lines, 480 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      "Done — clean-cache.js fixed. Now uses execSync instead of ctx.tools.shell.",
   },
 
-  // ── update an existing file ───────────────────────────────────────────────
+  // ── modify existing file (read first, then write) ─────────────────────────
   {
     role: "user",
-    content: "update LENS.md",
+    content: "add a logout button to src/components/Header.tsx",
   },
   {
     role: "assistant",
-    content: "<read-file>LENS.md</read-file>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from read-file of LENS.md:\n\nFile: LENS.md (33 lines)\n\n# Lens Analysis\n\n## Overview\nA CLI tool for codebase analysis.\n\n## Important Folders\n- src/components\n- src/utils\n\n## Suggestions\n- Add tests\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      '<write-file>\n{"path": "LENS.md", "content": "# Lens Analysis\\n\\n## Overview\\nA CLI tool for AI-powered codebase analysis, built with React and Ink.\\n\\n## Important Folders\\n- src/components — UI components rendered in the terminal\\n- src/utils — tools, chat, memory, and registry utilities\\n\\n## Suggestions\\n- Add tests\\n- Add more providers\\n- Improve error handling"}\n</write-file>',
+    content: "<read-file>src/components/Header.tsx</read-file>",
   },
   {
     role: "user",
     content:
-      "Here is the output from write-file to LENS.md:\n\nWritten: /repo/LENS.md (15 lines, 420 bytes)\n\nPlease continue your response based on this output.",
+      "Here is the output from read-file of src/components/Header.tsx:\n\nFile: src/components/Header.tsx (42 lines)\n\nimport React from 'react';\n// ... existing content ...\n\nPlease continue your response based on this output.",
   },
   {
     role: "assistant",
-    content: "Done — LENS.md updated.",
+    content:
+      '<changes>\n{"summary": "Add logout button to Header — preserves all existing content", "patches": [{"path": "src/components/Header.tsx", "content": "// complete file with logout button added", "isNew": false}]}\n</changes>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from changes:\n\nChanges applied.\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content: "Done — logout button added to Header.tsx.",
   },
 
-  // ── write a new doc file directly ─────────────────────────────────────────
+  // ── fix multiple files (read-files first, write each once) ────────────────
   {
     role: "user",
-    content: "write a contributing guide",
+    content: "fix addons/a.js, addons/b.js and addons/c.js",
   },
   {
     role: "assistant",
     content:
-      '<write-file>\n{"path": "CONTRIBUTING.md", "content": "# Contributing\\n\\nPull requests welcome. Please open an issue first to discuss major changes."}\n</write-file>',
+      '<read-files>\n["addons/a.js", "addons/b.js", "addons/c.js"]\n</read-files>',
   },
   {
     role: "user",
     content:
-      "Here is the output from write-file to CONTRIBUTING.md:\n\nWritten: /repo/CONTRIBUTING.md (4 lines, 96 bytes)\n\nPlease continue your response based on this output.",
+      "Here is the output from read-files:\n\n=== addons/a.js ===\nmodule.exports = { name: 'a', run: async () => {} }\n\n=== addons/b.js ===\nmodule.exports = { name: 'b', run: async () => {} }\n\n=== addons/c.js ===\nmodule.exports = { name: 'c', run: async () => {} }\n\nPlease continue your response based on this output.",
   },
   {
     role: "assistant",
-    content: "Done — CONTRIBUTING.md has been written.",
+    content:
+      '<write-file>\n{"path": "addons/a.js", "content": "const { defineTool } = require(\\"@ridit/lens-sdk\\");\\n\\ndefineTool({\\n  name: \\"a\\",\\n  description: \\"Does A\\",\\n  safe: true,\\n  permissionLabel: \\"Run A\\",\\n  systemPromptEntry: () => \\"<a>{}</a> — run A\\",\\n  parseInput: () => ({}),\\n  summariseInput: () => \\"a\\",\\n  execute: async (_, ctx) => ({ kind: \\"text\\", value: \\"A done!\\" }),\\n});"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to addons/a.js:\n\nWritten: /repo/addons/a.js (12 lines, 280 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "addons/b.js", "content": "const { defineTool } = require(\\"@ridit/lens-sdk\\");\\n\\ndefineTool({\\n  name: \\"b\\",\\n  description: \\"Does B\\",\\n  safe: true,\\n  permissionLabel: \\"Run B\\",\\n  systemPromptEntry: () => \\"<b>{}</b> — run B\\",\\n  parseInput: () => ({}),\\n  summariseInput: () => \\"b\\",\\n  execute: async (_, ctx) => ({ kind: \\"text\\", value: \\"B done!\\" }),\\n});"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to addons/b.js:\n\nWritten: /repo/addons/b.js (12 lines, 280 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "addons/c.js", "content": "const { defineTool } = require(\\"@ridit/lens-sdk\\");\\n\\ndefineTool({\\n  name: \\"c\\",\\n  description: \\"Does C\\",\\n  safe: true,\\n  permissionLabel: \\"Run C\\",\\n  systemPromptEntry: () => \\"<c>{}</c> — run C\\",\\n  parseInput: () => ({}),\\n  summariseInput: () => \\"c\\",\\n  execute: async (_, ctx) => ({ kind: \\"text\\", value: \\"C done!\\" }),\\n});"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to addons/c.js:\n\nWritten: /repo/addons/c.js (12 lines, 280 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      "Done — fixed all three addons. Each now uses defineTool from @ridit/lens-sdk correctly.",
   },
 
-  // ── scaffolding a project ─────────────────────────────────────────────────
+  // ── scaffold a project ────────────────────────────────────────────────────
   {
     role: "user",
     content:
@@ -106,12 +138,12 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "assistant",
     content:
-      '<write-file>\n{"path": "myapp/package.json", "content": "{\\n  \\"name\\": \\"myapp\\",\\n  \\"version\\": \\"1.0.0\\",\\n  \\"scripts\\": { \\"dev\\": \\"bun run src/index.tsx\\" },\\n  \\"dependencies\\": { \\"react\\": \\"^18.2.0\\", \\"ink\\": \\"^4.4.1\\" },\\n  \\"devDependencies\\": { \\"@types/react\\": \\"^18.2.0\\" }\\n}"}\n</write-file>',
+      '<write-file>\n{"path": "myapp/package.json", "content": "{\\n  \\"name\\": \\"myapp\\",\\n  \\"version\\": \\"1.0.0\\",\\n  \\"scripts\\": { \\"dev\\": \\"bun run src/index.tsx\\" },\\n  \\"dependencies\\": { \\"react\\": \\"^18.2.0\\", \\"ink\\": \\"^4.4.1\\" }\\n}"}\n</write-file>',
   },
   {
     role: "user",
     content:
-      "Here is the output from write-file to myapp/package.json:\n\nWritten: /repo/myapp/package.json (10 lines, 220 bytes)\n\nPlease continue your response based on this output.",
+      "Here is the output from write-file to myapp/package.json:\n\nWritten: /repo/myapp/package.json (8 lines, 180 bytes)\n\nPlease continue your response based on this output.",
   },
   {
     role: "assistant",
@@ -126,100 +158,10 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   {
     role: "assistant",
     content:
-      "Done — scaffolded myapp/package.json and myapp/src/index.tsx. Run `cd myapp && bun install` to get started.",
-  },
-
-  // ── delete / open / pdf ───────────────────────────────────────────────────
-  {
-    role: "user",
-    content: "delete src/old-component.tsx",
-  },
-  {
-    role: "assistant",
-    content: "<delete-file>src/old-component.tsx</delete-file>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from delete-file of src/old-component.tsx:\n\nDeleted: /repo/src/old-component.tsx\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Done — src/old-component.tsx has been deleted.",
-  },
-  {
-    role: "user",
-    content: "delete the legacy folder",
-  },
-  {
-    role: "assistant",
-    content: "<delete-folder>src/legacy</delete-folder>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from delete-folder of src/legacy:\n\nDeleted folder: /repo/src/legacy\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Done — src/legacy and all its contents have been deleted.",
-  },
-  {
-    role: "user",
-    content: "open https://github.com/microsoft/typescript",
-  },
-  {
-    role: "assistant",
-    content: "<open-url>https://github.com/microsoft/typescript</open-url>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from open-url https://github.com/microsoft/typescript:\n\nOpened: https://github.com/microsoft/typescript\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Opened the TypeScript GitHub page in your browser.",
-  },
-  {
-    role: "user",
-    content:
-      "generate a PDF report about the project and save it to docs/report.pdf",
-  },
-  {
-    role: "assistant",
-    content:
-      '<generate-pdf>\n{"path": "docs/report.pdf", "content": "# Project Report\\n\\n## Overview\\n\\nThis document summarizes the project.\\n\\n## Details\\n\\nMore content here."}\n</generate-pdf>',
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from generate-pdf to docs/report.pdf:\n\nPDF generated: /repo/docs/report.pdf\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Done — docs/report.pdf has been generated.",
+      "Done — scaffolded myapp/package.json and myapp/src/index.tsx. Run cd myapp && bun install to get started.",
   },
 
   // ── grep ──────────────────────────────────────────────────────────────────
-  {
-    role: "user",
-    content: 'grep -R "ChatRunner" -n src',
-  },
-  {
-    role: "assistant",
-    content: '<grep>\n{"pattern": "ChatRunner", "glob": "src/**/*"}\n</grep>',
-  },
-  {
-    role: "user",
-    content:
-      'Here is the output from grep for "ChatRunner":\n\ngrep /ChatRunner/ src/**/* — 3 match(es) in 2 file(s)\n\nsrc/index.tsx\n  12: import { ChatRunner } from "./components/chat/ChatRunner";\n\nsrc/components/chat/ChatRunner.tsx\n  1: export const ChatRunner = ...\n\nPlease continue your response based on this output.',
-  },
-  {
-    role: "assistant",
-    content:
-      "ChatRunner is defined in src/components/chat/ChatRunner.tsx and imported in src/index.tsx.",
-  },
   {
     role: "user",
     content: "find all usages of useInput in the codebase",
@@ -239,160 +181,6 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
       "useInput is used in src/components/chat/ChatRunner.tsx — imported on line 5 and called on line 210.",
   },
 
-  // ── showing tool usage as an example (bracket notation, NOT real tags) ────
-  {
-    role: "user",
-    content: "show me how to use the read-file tool",
-  },
-  {
-    role: "assistant",
-    content:
-      "To read a file, emit the tag alone in your response — nothing else on that turn:\n\n```text\n[read-file]src/components/Header.tsx[/read-file]\n```\n\nThe result comes back as the next user message and you can then analyze it.",
-  },
-  {
-    role: "user",
-    content: "show me an example of the shell tool",
-  },
-  {
-    role: "assistant",
-    content:
-      "To run a shell command, emit only the tag:\n\n```text\n[shell]node -v[/shell]\n```\n\nThe stdout/stderr is returned and you can read it in the next turn.",
-  },
-
-  // ── read-folder ───────────────────────────────────────────────────────────
-  {
-    role: "user",
-    content: "read src folder",
-  },
-  {
-    role: "assistant",
-    content: "<read-folder>src</read-folder>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from read-folder of src:\n\nFolder: src (4 entries)\n\nFiles:\n  index.ts\n  App.tsx\n\nSubfolders:\n  components/\n  utils/\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      "The src folder contains index.ts, App.tsx, plus subfolders components/ and utils/.",
-  },
-  {
-    role: "user",
-    content: "what files are in src/components?",
-  },
-  {
-    role: "assistant",
-    content: "<read-folder>src/components</read-folder>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from read-folder of src/components:\n\nFolder: src/components (5 entries)\n\nFiles:\n  Header.tsx\n  Footer.tsx\n  Button.tsx\n\nSubfolders:\n  ui/\n  forms/\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      "src/components has 3 files — Header.tsx, Footer.tsx, Button.tsx — plus two subfolders: ui/ and forms/.",
-  },
-  {
-    role: "user",
-    content: "show me the project structure",
-  },
-  {
-    role: "assistant",
-    content: "<read-folder>.</read-folder>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from read-folder of .:\n\nFolder: . (5 entries)\n\nFiles:\n  package.json\n  tsconfig.json\n  README.md\n\nSubfolders:\n  src/\n  node_modules/\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      "The project root has package.json, tsconfig.json, README.md and the src/ folder for source code.",
-  },
-
-  // ── fetch → write → done ──────────────────────────────────────────────────
-  {
-    role: "user",
-    content: "fetch https://api.github.com/repos/microsoft/typescript",
-  },
-  {
-    role: "assistant",
-    content: "<fetch>https://api.github.com/repos/microsoft/typescript</fetch>",
-  },
-  {
-    role: "user",
-    content:
-      'Here is the output from fetch of https://api.github.com/repos/microsoft/typescript:\n\n{"name":"TypeScript","stargazers_count":100000}\n\nPlease continue your response based on this output.',
-  },
-  {
-    role: "assistant",
-    content:
-      "Found 1 object with fields: name, stargazers_count. Writing to ts-info.json now.",
-  },
-  {
-    role: "user",
-    content: "ok go ahead",
-  },
-  {
-    role: "assistant",
-    content:
-      '<write-file>\n{"path": "ts-info.json", "content": "{\"name\":\"TypeScript\",\"stars\":100000}"}\n</write-file>',
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from write-file to ts-info.json:\n\nWritten: /repo/ts-info.json (1 lines, 44 bytes)\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Done — ts-info.json has been saved.",
-  },
-
-  // ── write it to a file → done ─────────────────────────────────────────────
-  {
-    role: "user",
-    content: "write it to a file called hello.py",
-  },
-  {
-    role: "assistant",
-    content:
-      '<write-file>\n{"path": "hello.py", "content": "# hello.py\\nprint(\'hello\')"}\n</write-file>',
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from write-file to hello.py:\n\nWritten: /repo/hello.py (2 lines, 32 bytes)\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content: "Done — hello.py has been written.",
-  },
-
-  // ── read before write (modifying existing file only) ─────────────────────
-  {
-    role: "user",
-    content: "add a logout button to src/components/Header.tsx",
-  },
-  {
-    role: "assistant",
-    content: "<read-file>src/components/Header.tsx</read-file>",
-  },
-  {
-    role: "user",
-    content:
-      "Here is the output from read-file of src/components/Header.tsx:\n\nFile: src/components/Header.tsx (42 lines)\n\nimport React from 'react';\n// ... full file content ...\n\nPlease continue your response based on this output.",
-  },
-  {
-    role: "assistant",
-    content:
-      '<changes>\n{"summary": "Add logout button to Header — preserves all existing nav items and imports", "patches": [{"path": "src/components/Header.tsx", "content": "// complete file with logout button added", "isNew": false}]}\n</changes>',
-  },
-
   // ── shell ─────────────────────────────────────────────────────────────────
   {
     role: "user",
@@ -409,47 +197,7 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
   },
   {
     role: "assistant",
-    content: "You're running Node.js v20.11.0.",
-  },
-
-  // ── clone ─────────────────────────────────────────────────────────────────
-  {
-    role: "user",
-    content: "clone https://github.com/facebook/react",
-  },
-  {
-    role: "assistant",
-    content: "<clone>https://github.com/facebook/react</clone>",
-  },
-  {
-    role: "user",
-    content:
-      "Cloned react to /tmp/react — 2847 files available. You can now read files from this repo using read-file with paths relative to /tmp/react.",
-  },
-  {
-    role: "assistant",
-    content:
-      "Cloned! The React repo has 2847 files. I can read source files, explain how it works, or suggest improvements — just ask.",
-  },
-
-  // ── search ────────────────────────────────────────────────────────────────
-  {
-    role: "user",
-    content: "what does the ?? operator do in typescript",
-  },
-  {
-    role: "assistant",
-    content: "<search>nullish coalescing operator ?? TypeScript</search>",
-  },
-  {
-    role: "user",
-    content:
-      'Here is the output from web search for "nullish coalescing operator ?? TypeScript":\n\nAnswer: The ?? operator returns the right-hand side when the left-hand side is null or undefined.\n\nPlease continue your response based on this output.',
-  },
-  {
-    role: "assistant",
-    content:
-      "The ?? operator is the nullish coalescing operator. It returns the right side only when the left side is null or undefined.",
+    content: "You're on Node.js v20.11.0.",
   },
 
   // ── memory ────────────────────────────────────────────────────────────────
@@ -462,13 +210,25 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content:
       "<memory-add>Project uses bun as the package manager and runtime, not npm or node</memory-add>\n\nGot it — I'll always use bun for this project.",
   },
+
+  // ── addon format ──────────────────────────────────────────────────────────
   {
     role: "user",
-    content: "forget the bun preference",
+    content: "add a new addon that prints hello world",
   },
   {
     role: "assistant",
     content:
-      "<memory-delete>MEMORY_ID</memory-delete>\n\nDone — removed that memory.",
+      '<write-file>\n{"path": "addons/hello-world.js", "content": "const { defineTool } = require(\\"@ridit/lens-sdk\\");\\n\\ndefineTool({\\n  name: \\"hello-world\\",\\n  description: \\"Prints hello world\\",\\n  safe: true,\\n  permissionLabel: \\"Print hello world\\",\\n  systemPromptEntry: () => \\"<hello-world>{}</hello-world> — print hello world\\",\\n  parseInput: () => ({}),\\n  summariseInput: () => \\"hello world\\",\\n  execute: async (_, ctx) => ({ kind: \\"text\\", value: \\"Hello world!\\" }),\\n});"}\n</write-file>',
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from write-file to addons/hello-world.js:\n\nWritten: /repo/addons/hello-world.js (14 lines, 320 bytes)\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      "Done — addons/hello-world.js created using defineTool from @ridit/lens-sdk.",
   },
 ];
