@@ -144,7 +144,7 @@ Rules:
 - Skip bullets that just restate the subject line or describe trivial version bumps
 - Be specific — mention file names, feature names, component names
 - No markdown, no backticks, no code blocks
-- Output ONLY the commit message, nothing else
+- Output ONLY the commit message, nothing else — no preamble, no explanation, no thinking
 
 Examples of good short commits:
 chore: bump version to 0.1.6
@@ -158,6 +158,13 @@ feat(chat): add persistent memory across sessions
 - inject memory summary into system prompt on load
 - expose /memory commands for manual management`;
 
+function stripThinking(raw: string): string {
+  return raw
+    .replace(/<thinking>[\s\S]*?<\/thinking>/g, "")
+    .replace(/^[\s\n]+/, "")
+    .trim();
+}
+
 async function generateCommitMessage(
   provider: Provider,
   diff: string,
@@ -170,7 +177,8 @@ async function generateCommitMessage(
     },
   ];
   const raw = await callChat(provider, SYSTEM_PROMPT, msgs);
-  return typeof raw === "string" ? raw.trim() : "chore: update files";
+  if (typeof raw !== "string") return "chore: update files";
+  return stripThinking(raw) || "chore: update files";
 }
 
 function trunc(s: string, n: number) {
