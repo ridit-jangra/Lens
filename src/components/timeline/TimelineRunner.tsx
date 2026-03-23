@@ -1179,7 +1179,6 @@ export function TimelineRunner({
 
   return (
     <Box flexDirection="column">
-      {/* header */}
       <Box gap={2} marginBottom={1}>
         <Text color={ACCENT} bold>
           ◈ TIMELINE
@@ -1195,7 +1194,6 @@ export function TimelineRunner({
         )}
       </Box>
 
-      {/* status messages */}
       <Static items={statusMsgs}>
         {(msg) => (
           <Box key={msg.id} paddingX={1} gap={1}>
@@ -1205,7 +1203,6 @@ export function TimelineRunner({
         )}
       </Static>
 
-      {/* search bar */}
       {isSearching && (
         <Box gap={1} marginBottom={1}>
           <Text color={ACCENT}>{"/"}</Text>
@@ -1218,7 +1215,6 @@ export function TimelineRunner({
         </Box>
       )}
 
-      {/* commit list */}
       {visible.map((commit, i) => {
         const absIdx = scrollOffset + i;
         const isSel = absIdx === selectedIdx;
@@ -1251,7 +1247,6 @@ export function TimelineRunner({
         </Box>
       )}
 
-      {/* revert overlay */}
       {isReverting && mode.type === "revert" && (
         <RevertConfirm
           commit={mode.commit}
@@ -1268,7 +1263,6 @@ export function TimelineRunner({
         />
       )}
 
-      {/* ask panel */}
       {isAsking && provider && (
         <AskPanel
           commits={commits}
@@ -1281,7 +1275,6 @@ export function TimelineRunner({
         />
       )}
 
-      {/* shortcut bar */}
       <Box marginTop={1}>
         <Text color="gray" dimColor>
           {shortcutHint}

@@ -7,6 +7,7 @@ import { InitCommand } from "./commands/provider";
 import { ReviewCommand } from "./commands/review";
 import { TaskCommand } from "./commands/task";
 import { ChatCommand } from "./commands/chat";
+import { WatchCommand } from "./commands/watch";
 import { TimelineCommand } from "./commands/timeline";
 import { CommitCommand } from "./commands/commit";
 import { registerBuiltins } from "./utils/tools/builtins";
@@ -102,6 +103,26 @@ program
           confirm={opts.confirm ?? false}
           preview={opts.preview ?? false}
           push={opts.push ?? false}
+        />,
+      );
+    },
+  );
+
+program
+  .command("watch <cmd>")
+  .alias("spy")
+  .description("Watch a dev command and get AI suggestions for errors")
+  .option("-p, --path <path>", "Path to the repo", ".")
+  .option("--clean", "Only show AI suggestions, hide raw logs")
+  .option("--fix-all", "Auto-apply fixes as errors are detected")
+  .action(
+    (cmd: string, opts: { path: string; clean: boolean; fixAll: boolean }) => {
+      render(
+        <WatchCommand
+          cmd={cmd}
+          path={opts.path}
+          clean={opts.clean ?? false}
+          fixAll={opts.fixAll ?? false}
         />,
       );
     },
