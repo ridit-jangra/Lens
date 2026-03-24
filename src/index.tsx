@@ -18,6 +18,8 @@ await loadAddons();
 
 const program = new Command();
 
+console.log("Tip: Star Lens on GitHub ⭐");
+
 program
   .command("stalk <url>")
   .alias("repo")
