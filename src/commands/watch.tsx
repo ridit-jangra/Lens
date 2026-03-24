@@ -11,9 +11,18 @@ interface Props {
   path: string;
   clean: boolean;
   fixAll: boolean;
+  autoRestart: boolean;
+  prompt?: string;
 }
 
-export function WatchCommand({ cmd, path: inputPath, clean, fixAll }: Props) {
+export function WatchCommand({
+  cmd,
+  path: inputPath,
+  clean,
+  fixAll,
+  autoRestart,
+  prompt,
+}: Props) {
   const repoPath = path.resolve(inputPath);
 
   if (!cmd.trim()) {
@@ -35,6 +44,13 @@ export function WatchCommand({ cmd, path: inputPath, clean, fixAll }: Props) {
   }
 
   return (
-    <WatchRunner cmd={cmd} repoPath={repoPath} clean={clean} fixAll={fixAll} />
+    <WatchRunner
+      cmd={cmd}
+      repoPath={repoPath}
+      clean={clean}
+      fixAll={fixAll}
+      autoRestart={autoRestart}
+      extraPrompt={prompt}
+    />
   );
 }

@@ -115,14 +115,27 @@ program
   .option("-p, --path <path>", "Path to the repo", ".")
   .option("--clean", "Only show AI suggestions, hide raw logs")
   .option("--fix-all", "Auto-apply fixes as errors are detected")
+  .option("--auto-restart", "Automatically re-run the command after a crash")
+  .option("--prompt <text>", "Extra context for the AI about your project")
   .action(
-    (cmd: string, opts: { path: string; clean: boolean; fixAll: boolean }) => {
+    (
+      cmd: string,
+      opts: {
+        path: string;
+        clean: boolean;
+        fixAll: boolean;
+        autoRestart: boolean;
+        prompt?: string;
+      },
+    ) => {
       render(
         <WatchCommand
           cmd={cmd}
           path={opts.path}
           clean={opts.clean ?? false}
           fixAll={opts.fixAll ?? false}
+          autoRestart={opts.autoRestart ?? false}
+          prompt={opts.prompt}
         />,
       );
     },
