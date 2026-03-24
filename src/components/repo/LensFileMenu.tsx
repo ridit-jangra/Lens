@@ -31,18 +31,11 @@ const buildOptions = (lf: LensFile): MenuOption[] => {
       description: "Run a fresh AI analysis",
     },
   ];
-  if (lf.suggestions.length > 0 || lf.missingConfigs.length > 0) {
+  if (lf.suggestions.length > 0) {
     opts.push({
       id: "fix-issues",
       label: "Fix issues",
-      description: `${lf.suggestions.length + lf.missingConfigs.length} issues found`,
-    });
-  }
-  if (lf.securityIssues.length > 0) {
-    opts.push({
-      id: "security",
-      label: "Review security issues",
-      description: `${lf.securityIssues.length} issue(s) found`,
+      description: `${lf.suggestions.length} issues found`,
     });
   }
   opts.push({

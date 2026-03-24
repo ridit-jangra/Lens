@@ -19,8 +19,8 @@ Your job is to select the files you need to read to fully understand what this p
 Rules:
 - ALWAYS include package.json, tsconfig.json, README.md if they exist
 - ALWAYS include ALL files inside src/ — especially index files, main entry points, and any files that reveal the project's purpose (components, hooks, utilities, exports)
-- Include config files: vite.config, eslint.config, tailwind.config, etc.
-- If there is a src/index.ts or src/main.ts or src/lib/index.ts, ALWAYS include it — these reveal what the project exports
+- Include config files: vite.config, eslint.config, tailwind.config, bun.lockb, .nvmrc, etc.
+- If there is a src/index.ts or src/main.ts or src/lib/index.ts, ALWAYS include it
 - Do NOT skip source files just because there are many — pick up to 30 files
 - Prefer breadth: pick at least one file from every folder under src/
 
@@ -36,34 +36,94 @@ export function buildAnalysisPrompt(
     .map((f) => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 3000)}\n\`\`\``)
     .join("\n\n");
 
-  return `You are a senior software engineer analyzing a repository.
+  return `You are a senior software engineer building a persistent knowledge base about a codebase. Your output will be stored and incrementally updated over time — it must be durable, structural knowledge, not ephemeral warnings.
+
 Repository URL: ${repoUrl}
 
 Here are the file contents:
 
 ${fileList}
 
-Analyze this repository thoroughly using the actual file contents above.
+Analyze this repository and extract permanent, structural understanding. Focus on WHAT the codebase IS and HOW it works — not linting issues or missing configs.
 
-Important instructions:
-- Read the actual source code carefully to determine what the project really is
-- Look at every component, hook, utility and describe what it actually does
-- importantFolders must describe EVERY folder with specifics: what files are in it, what they do, and why they matter
-- suggestions must be specific to the actual code you read — reference real file names, real function names, real patterns you saw
-- missingConfigs should only list things genuinely missing for THIS type of project
-- securityIssues must reference actual file names and line patterns found
-- overview must be specific: name the actual components/features/exports you saw, not just the tech stack
+Rules:
+- Read source code carefully. Reference real file names, real function names, real patterns.
+- tooling: detect from package.json, lockfiles, config files. Keys: packageManager (npm/yarn/pnpm/bun), language, runtime, bundler, framework, testRunner, linter, formatter — only include what you actually found evidence of.
+- keyFiles: list the most important files with a one-line description of what they do. Format: "src/utils/ai.ts: callModel abstraction supporting anthropic/gemini/ollama/openai"
+- patterns: list recurring idioms, design patterns, or conventions actually used in the code. E.g. "Discriminated union state machines for multi-stage UI flows", "React + Ink for terminal rendering"
+- architecture: 2-3 sentences describing the high-level structure and how data flows through the system.
+- importantFolders: describe EVERY folder with specifics — what files are in it and what they do.
+- suggestions: specific, actionable improvements referencing real file names and real patterns you saw. No generic advice.
+- overview: 3-5 sentences naming actual components, features, exports. Be specific.
 
-Respond ONLY with a JSON object (no markdown, no explanation) with this exact shape:
+Respond ONLY with a JSON object (no markdown, no explanation):
 {
-  "overview": "3-5 sentences. Name the actual components, features, or exports you found. Describe what the project does, who would use it, and what makes it distinctive. Be specific — mention actual file names or component names.",
+  "overview": "...",
+  "architecture": "...",
+  "tooling": {
+    "packageManager": "bun",
+    "language": "TypeScript",
+    "runtime": "Node.js",
+    "bundler": "tsup",
+    "framework": "Ink"
+  },
   "importantFolders": [
-    "src/components: contains X, Y, Z components. ButtonComponent uses CVA for variants. Each component is exported from index.ts."
+    "src/commands: contains chat.tsx, commit.tsx, review.tsx — each exports an Ink component that is the top-level renderer for that CLI command"
   ],
-  "missingConfigs": ["only configs genuinely missing and relevant — explain WHY each is missing for this specific project"],
-  "securityIssues": ["reference actual file names and patterns found"],
-  "suggestions": ["each suggestion must reference actual code — e.g. 'In src/components/Button.tsx, consider adding ...' not generic advice"]
+  "keyFiles": [
+    "src/utils/ai.ts: callModel abstraction supporting anthropic/gemini/ollama/openai providers via a unified Provider type"
+  ],
+  "patterns": [
+    "Discriminated union state machines (type + stage fields) for multi-step UI flows in every command component"
+  ],
+  "suggestions": [
+    "In src/utils/ai.ts, callModel has no retry logic — adding exponential backoff would improve reliability for ollama which can be slow to start"
+  ]
 }`;
+}
+
+export function buildToolingPatchPrompt(
+  repoUrl: string,
+  files: ImportantFile[],
+): string {
+  const relevant = files.filter((f) =>
+    [
+      "package.json",
+      "bun.lockb",
+      "yarn.lock",
+      "pnpm-lock.yaml",
+      "package-lock.json",
+      "tsconfig.json",
+      ".nvmrc",
+      ".node-version",
+    ].includes(path.basename(f.path)),
+  );
+
+  if (relevant.length === 0) return "";
+
+  const fileList = relevant
+    .map((f) => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 2000)}\n\`\`\``)
+    .join("\n\n");
+
+  return `You are analyzing a repository's tooling configuration.
+Repository: ${repoUrl}
+
+${fileList}
+
+Extract only tooling information. Respond ONLY with a JSON object:
+{
+  "tooling": {
+    "packageManager": "bun | npm | yarn | pnpm",
+    "language": "TypeScript | JavaScript | ...",
+    "runtime": "Node.js | Bun | Deno | ...",
+    "bundler": "tsup | esbuild | vite | webpack | ...",
+    "framework": "React | Ink | Next.js | ...",
+    "testRunner": "vitest | jest | ...",
+    "linter": "eslint | biome | ...",
+    "formatter": "prettier | biome | ..."
+  }
+}
+Only include keys where you found actual evidence. No markdown, no explanation.`;
 }
 
 function parseStringArray(text: string): string[] {
@@ -87,10 +147,23 @@ function parseResult(text: string): AnalysisResult {
   return {
     overview: parsed.overview ?? "No overview provided",
     importantFolders: parsed.importantFolders ?? [],
-    missingConfigs: parsed.missingConfigs ?? [],
-    securityIssues: parsed.securityIssues ?? [],
+    tooling: parsed.tooling ?? {},
+    keyFiles: parsed.keyFiles ?? [],
+    patterns: parsed.patterns ?? [],
+    architecture: parsed.architecture ?? "",
     suggestions: parsed.suggestions ?? [],
   };
+}
+
+function parseToolingPatch(text: string): Partial<AnalysisResult> | null {
+  try {
+    const cleaned = text.replace(/```json|```/g, "").trim();
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]) as Partial<AnalysisResult>;
+  } catch {
+    return null;
+  }
 }
 
 export function checkOllamaInstalled(): Promise<boolean> {
@@ -218,6 +291,21 @@ export async function requestFileList(
     }
   }
   return files;
+}
+
+export async function extractToolingPatch(
+  repoUrl: string,
+  files: ImportantFile[],
+  provider: Provider,
+): Promise<Partial<AnalysisResult> | null> {
+  const prompt = buildToolingPatchPrompt(repoUrl, files);
+  if (!prompt) return null;
+  try {
+    const text = await callModel(provider, prompt);
+    return parseToolingPatch(text);
+  } catch {
+    return null;
+  }
 }
 
 export async function analyzeRepo(
