@@ -27,12 +27,24 @@ export type AIProvider =
 export type AnalysisResult = {
   overview: string;
   importantFolders: string[];
-  missingConfigs: string[];
-  securityIssues: string[];
+
+  tooling: Record<string, string>;
+
+  keyFiles: string[];
+
+  patterns: string[];
+
+  architecture: string;
   suggestions: string[];
 };
 
-export type PackageManager = "npm" | "yarn" | "pnpm" | "pip" | "unknown";
+export type PackageManager =
+  | "npm"
+  | "yarn"
+  | "pnpm"
+  | "bun"
+  | "pip"
+  | "unknown";
 
 export type PreviewInfo = {
   packageManager: PackageManager;

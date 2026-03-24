@@ -7,10 +7,13 @@ export const LENS_FILENAME = "LENS.md";
 export type LensFile = {
   overview: string;
   importantFolders: string[];
-  missingConfigs: string[];
-  securityIssues: string[];
+  tooling: Record<string, string>;
+  keyFiles: string[];
+  patterns: string[];
+  architecture: string;
   suggestions: string[];
   generatedAt: string;
+  lastUpdated: string;
 };
 
 export function lensFilePath(repoPath: string): string {
@@ -21,36 +24,96 @@ export function lensFileExists(repoPath: string): boolean {
   return existsSync(lensFilePath(repoPath));
 }
 
-export function writeLensFile(repoPath: string, result: AnalysisResult): void {
-  const data: LensFile = {
-    ...result,
-    generatedAt: new Date().toISOString(),
-  };
+function renderLensFile(data: LensFile): string {
+  const toolingLines = Object.entries(data.tooling)
+    .map(([k, v]) => `- **${k}**: ${v}`)
+    .join("\n");
 
-  const content = `# Lens Analysis
-> Generated: ${data.generatedAt}
+  return `# Lens
+> Generated: ${data.generatedAt}${data.lastUpdated !== data.generatedAt ? `  |  Updated: ${data.lastUpdated}` : ""}
 
 ## Overview
 ${data.overview}
 
+## Architecture
+${data.architecture}
+
+## Tooling & Conventions
+${toolingLines || "- Not yet determined"}
+
 ## Important Folders
-${data.importantFolders.map((f) => `- ${f}`).join("\n")}
+${data.importantFolders.map((f) => `- ${f}`).join("\n") || "- None"}
 
-## Missing Configs
-${data.missingConfigs.length > 0 ? data.missingConfigs.map((f) => `- ${f}`).join("\n") : "- None detected"}
+## Key Files
+${data.keyFiles.map((f) => `- ${f}`).join("\n") || "- None"}
 
-## Security Issues
-${data.securityIssues.length > 0 ? data.securityIssues.map((s) => `- ${s}`).join("\n") : "- None detected"}
+## Patterns & Idioms
+${data.patterns.map((p) => `- ${p}`).join("\n") || "- None"}
 
 ## Suggestions
-${data.suggestions.map((s) => `- ${s}`).join("\n")}
+${data.suggestions.map((s) => `- ${s}`).join("\n") || "- None"}
 
 <!--lens-json
 ${JSON.stringify(data)}
 lens-json-->
 `;
+}
 
-  writeFileSync(lensFilePath(repoPath), content, "utf-8");
+export function writeLensFile(repoPath: string, result: AnalysisResult): void {
+  const now = new Date().toISOString();
+  const data: LensFile = {
+    overview: result.overview,
+    importantFolders: result.importantFolders,
+    tooling: result.tooling ?? {},
+    keyFiles: result.keyFiles ?? [],
+    patterns: result.patterns ?? [],
+    architecture: result.architecture ?? "",
+    suggestions: result.suggestions,
+    generatedAt: now,
+    lastUpdated: now,
+  };
+  writeFileSync(lensFilePath(repoPath), renderLensFile(data), "utf-8");
+}
+
+export function patchLensFile(
+  repoPath: string,
+  patch: Partial<AnalysisResult>,
+): void {
+  const existing = readLensFile(repoPath);
+  const now = new Date().toISOString();
+
+  const base: LensFile = existing ?? {
+    overview: "",
+    importantFolders: [],
+    tooling: {},
+    keyFiles: [],
+    patterns: [],
+    architecture: "",
+    suggestions: [],
+    generatedAt: now,
+    lastUpdated: now,
+  };
+
+  const merged: LensFile = {
+    ...base,
+    lastUpdated: now,
+    overview: patch.overview ?? base.overview,
+    architecture: patch.architecture ?? base.architecture,
+    tooling: { ...base.tooling, ...(patch.tooling ?? {}) },
+    importantFolders: dedup([
+      ...base.importantFolders,
+      ...(patch.importantFolders ?? []),
+    ]),
+    keyFiles: dedup([...base.keyFiles, ...(patch.keyFiles ?? [])]),
+    patterns: dedup([...base.patterns, ...(patch.patterns ?? [])]),
+    suggestions: dedup([...base.suggestions, ...(patch.suggestions ?? [])]),
+  };
+
+  writeFileSync(lensFilePath(repoPath), renderLensFile(merged), "utf-8");
+}
+
+function dedup(arr: string[]): string[] {
+  return [...new Map(arr.map((s) => [s.trim().toLowerCase(), s])).values()];
 }
 
 export function readLensFile(repoPath: string): LensFile | null {
@@ -70,8 +133,10 @@ export function lensFileToAnalysisResult(lf: LensFile): AnalysisResult {
   return {
     overview: lf.overview,
     importantFolders: lf.importantFolders,
-    missingConfigs: lf.missingConfigs,
-    securityIssues: lf.securityIssues,
+    tooling: lf.tooling,
+    keyFiles: lf.keyFiles,
+    patterns: lf.patterns,
+    architecture: lf.architecture,
     suggestions: lf.suggestions,
   };
 }
