@@ -1,9 +1,3 @@
-//
-
-//
-
-//
-
 import type { Tool } from "@ridit/lens-sdk";
 
 type ChartType = "bar" | "line" | "sparkline";
@@ -13,9 +7,7 @@ interface ChartInput {
   title?: string;
   labels?: string[];
   values: number[];
-  /** For line charts: height in rows. Default 10. */
   height?: number;
-  /** Bar fill character. Default "█" */
   fill?: string;
 }
 
