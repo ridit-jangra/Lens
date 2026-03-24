@@ -56,7 +56,7 @@ program
   });
 
 program
-  .command("history")
+  .command("timeline")
   .description(
     "Explore your code history — see commits, changes, and evolution",
   )
