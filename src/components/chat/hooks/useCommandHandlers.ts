@@ -83,7 +83,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /auto --force-all
   if (t === "/auto --force-all") {
     if (ctx.forceApprove) {
       ctx.setForceApprove(false);
@@ -99,7 +98,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /auto
   if (t === "/auto") {
     if (ctx.forceApprove) {
       ctx.setForceApprove(false);
@@ -127,7 +125,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /clear history
   if (t === "/clear history") {
     clearRepoMemory(ctx.repoPath);
     pushMsg(
@@ -138,7 +135,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /chat (bare)
   if (t === "/chat") {
     pushMsg(
       makeMsg(
@@ -150,7 +146,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /chat rename
   if (t.startsWith("/chat rename")) {
     const parts = text.trim().split(/\s+/);
     const newName = parts.slice(2).join("-");
@@ -180,7 +175,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /chat delete
   if (t.startsWith("/chat delete")) {
     const parts = text.trim().split(/\s+/);
     const name = parts.slice(2).join("-");
@@ -214,7 +208,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /chat list
   if (t === "/chat list") {
     const chats = listChats(ctx.repoPath);
     const content =
@@ -230,7 +223,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /chat load
   if (t.startsWith("/chat load")) {
     const parts = text.trim().split(/\s+/);
     const name = parts.slice(2).join("-");
@@ -258,7 +250,7 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
       return true;
     }
     ctx.updateChatName(name);
-    // Replace messages wholesale
+
     ctx.setAllMessages(() => saved.messages);
     ctx.setCommitted(() => saved.messages);
     const notice = makeMsg(
@@ -269,7 +261,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /memory / /memory list
   if (t === "/memory list" || t === "/memory") {
     const mems = listMemories(ctx.repoPath);
     const content =
@@ -280,7 +271,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /memory add
   if (t.startsWith("/memory add")) {
     const content = text.trim().slice("/memory add".length).trim();
     if (!content) {
@@ -300,7 +290,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /memory delete
   if (t.startsWith("/memory delete")) {
     const id = text.trim().split(/\s+/)[2];
     if (!id) {
@@ -324,7 +313,6 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
     return true;
   }
 
-  // /memory clear
   if (t === "/memory clear") {
     clearRepoMemory(ctx.repoPath);
     pushMsg(

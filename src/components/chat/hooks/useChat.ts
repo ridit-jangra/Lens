@@ -55,7 +55,6 @@ export function useChat(repoPath: string) {
     setChatName(name);
   };
 
-  // Sync refs
   React.useEffect(() => {
     providerRef.current = provider;
   }, [provider]);
@@ -63,13 +62,11 @@ export function useChat(repoPath: string) {
     systemPromptRef.current = systemPrompt;
   }, [systemPrompt]);
 
-  // Load recent chats
   React.useEffect(() => {
     const chats = listChats(repoPath);
     setRecentChats(chats.slice(0, 10).map((c) => c.name));
   }, [repoPath]);
 
-  // Auto-save
   React.useEffect(() => {
     if (chatNameRef.current && allMessages.length > 1) {
       saveChat(chatNameRef.current, repoPath, allMessages);
@@ -341,7 +338,6 @@ export function useChat(repoPath: string) {
       setAllMessages(withTool);
       setCommitted((prev) => [...prev, toolMsg]);
 
-      // Process remainder inline before calling model again
       if (approved && remainder && remainder.length > 0) {
         processResponse(remainder, withTool, signal);
         return;
@@ -353,7 +349,6 @@ export function useChat(repoPath: string) {
       abortControllerRef.current = nextAbort;
       setStage({ type: "thinking" });
 
-      // FIX: retry with nudge if model returns empty after tool result
       callChat(currentProvider, currentSystemPrompt, withTool, nextAbort.signal)
         .then((r: string) => {
           if (nextAbort.signal.aborted) return;
@@ -492,7 +487,6 @@ export function useChat(repoPath: string) {
   };
 
   return {
-    // state
     stage,
     setStage,
     committed,
@@ -520,11 +514,11 @@ export function useChat(repoPath: string) {
     setRecentChats,
     pendingMsgIndex,
     setPendingMsgIndex,
-    // refs
+
     chatNameRef,
     providerRef,
     batchApprovedRef,
-    // actions
+
     updateChatName,
     sendMessage,
     handleProviderDone,

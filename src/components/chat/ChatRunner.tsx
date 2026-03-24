@@ -33,8 +33,6 @@ import { useChat } from "./hooks/useChat";
 import { useChatInput } from "./hooks/useChatInput";
 import { handleCommand, COMMANDS } from "./hooks/useCommandHandlers";
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
 function CommandPalette({
   query,
   recentChats,
@@ -149,13 +147,10 @@ function ForceAllWarning({
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-
 export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const chat = useChat(repoPath);
   const thinkingPhrase = useThinkingPhrase(chat.stage.type === "thinking");
 
-  // Stage-level key handler (clone offers, preview, permission, etc.)
   const handleStageKey = (input: string, key: any) => {
     const { stage } = chat;
 
@@ -406,7 +401,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
 
   const { stage } = chat;
 
-  // ─── Route to sub-views ───────────────────────────────────────────────────
   if (stage.type === "picking-provider")
     return <ProviderPicker onDone={chat.handleProviderDone} />;
   if (stage.type === "loading")
@@ -447,7 +441,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   if (stage.type === "viewing-file")
     return <ViewingFileView stage={stage} committed={chat.committed} />;
 
-  // ─── Main chat view ───────────────────────────────────────────────────────
   return (
     <Box flexDirection="column">
       <Static items={chat.committed}>
