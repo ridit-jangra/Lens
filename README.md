@@ -51,6 +51,8 @@ lens commit / crimes --push             push to remote after committing
 lens timeline / history                 explore commit history
 lens timeline / history -p /path        explore history of a specific repo
 
+lens run / spy                          run a dev command and get AI suggestions for errors
+
 lens provider                           configure AI providers
 ```
 
