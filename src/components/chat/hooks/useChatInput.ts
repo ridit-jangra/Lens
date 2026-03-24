@@ -67,7 +67,6 @@ export function useChatInput(
       return;
     }
 
-    // Delegate all other stage key handling to the parent
     onStageKeyInput(input, key);
   });
 
