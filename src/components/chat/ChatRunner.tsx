@@ -217,6 +217,9 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   const historyIndexRef = useRef<number>(-1);
   const [inputKey, setInputKey] = useState(0);
 
+  const providerRef = useRef<Provider | null>(null);
+  const systemPromptRef = useRef<string>("");
+
   const updateChatName = (name: string) => {
     chatNameRef.current = name;
     setChatName(name);
@@ -238,6 +241,14 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       saveChat(chatNameRef.current, repoPath, allMessages);
     }
   }, [allMessages]);
+
+  React.useEffect(() => {
+    providerRef.current = provider;
+  }, [provider]);
+
+  React.useEffect(() => {
+    systemPromptRef.current = systemPrompt;
+  }, [systemPrompt]);
 
   const handleError = (currentAll: Message[]) => (err: unknown) => {
     batchApprovedRef.current = false;
@@ -288,7 +299,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // Guard: response cut off mid-tool-tag (context limit hit during generation)
     if (isLikelyTruncated(raw)) {
       const truncMsg: Message = {
         role: "assistant",
@@ -442,6 +452,15 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         batchApprovedRef.current = true;
       }
 
+      const currentProvider = providerRef.current;
+      const currentSystemPrompt = systemPromptRef.current;
+
+      if (!currentProvider) {
+        batchApprovedRef.current = false;
+        setStage({ type: "idle" });
+        return;
+      }
+
       let result = "(denied by user)";
 
       if (approved) {
@@ -506,8 +525,28 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       const nextAbort = new AbortController();
       abortControllerRef.current = nextAbort;
       setStage({ type: "thinking" });
-      callChat(provider!, systemPrompt, withTool, nextAbort.signal)
-        .then((r: string) => processResponse(r, withTool, nextAbort.signal))
+
+      callChat(currentProvider, currentSystemPrompt, withTool, nextAbort.signal)
+        .then((r: string) => {
+          if (nextAbort.signal.aborted) return;
+          if (!r.trim()) {
+            const nudged: Message[] = [
+              ...withTool,
+              { role: "user", content: "Please continue.", type: "text" },
+            ];
+            return callChat(
+              currentProvider,
+              currentSystemPrompt,
+              nudged,
+              nextAbort.signal,
+            );
+          }
+          return r;
+        })
+        .then((r: string | undefined) => {
+          if (nextAbort.signal.aborted) return;
+          processResponse(r ?? "", withTool, nextAbort.signal);
+        })
         .catch(handleError(withTool));
     };
 
@@ -545,10 +584,8 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       return;
     }
 
-    // /auto --force-all — show warning first
     if (text.trim().toLowerCase() === "/auto --force-all") {
       if (forceApprove) {
-        // Toggle off immediately, no warning needed
         setForceApprove(false);
         setAutoApprove(false);
         const msg: Message = {
@@ -565,9 +602,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     }
 
     if (text.trim().toLowerCase() === "/auto") {
-      // /auto never enables force-all, only toggles safe auto-approve
       if (forceApprove) {
-        // Step down from force-all to normal auto
         setForceApprove(false);
         setAutoApprove(true);
         const msg: Message = {
@@ -829,8 +864,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
     const nextAll = [...allMessages, userMsg];
     setCommitted((prev) => [...prev, userMsg]);
     setAllMessages(nextAll);
-    // Do NOT clear toolResultCache here — safe tool results (read-file, read-folder, grep)
-    // persist across the whole session so the model never re-reads the same resource twice.
     batchApprovedRef.current = false;
 
     inputHistoryRef.current = [
@@ -862,7 +895,6 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
   useInput((input, key) => {
     if (showTimeline) return;
 
-    // Esc cancels the force-all warning
     if (showForceWarning && key.escape) {
       setShowForceWarning(false);
       return;
@@ -1118,6 +1150,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
 
   const handleProviderDone = (p: Provider) => {
     setProvider(p);
+    providerRef.current = p;
     setStage({ type: "loading" });
     fetchFileTree(repoPath)
       .catch(() => walkDir(repoPath))
@@ -1129,10 +1162,11 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
           ? `\n\n## LENS.md (previous analysis)\n${lensFile.overview}\n\nImportant folders: ${lensFile.importantFolders.join(", ")}\nSuggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
           : "";
         const toolsSection = registry.buildSystemPromptSection();
-        setSystemPrompt(
+        const prompt =
           buildSystemPrompt(importantFiles, historySummary, toolsSection) +
-            lensContext,
-        );
+          lensContext;
+        setSystemPrompt(prompt);
+        systemPromptRef.current = prompt;
         const greeting: Message = {
           role: "assistant",
           content: `Welcome to Lens\nCodebase loaded — ${importantFiles.length} files indexed.${historySummary ? "\n\nI have memory of previous actions in this repo." : ""}${lensFile ? "\n\nFound LENS.md — I have context from a previous analysis of this repo." : ""}\nAsk me anything, tell me what to build, share a URL, or ask me to read/write files.\n\nTip: type /timeline to browse commit history.`,
