@@ -354,7 +354,7 @@ type ActiveInvestigation = {
   startTime: number;
 };
 
-export function WatchRunner({
+export function RunRunner({
   cmd,
   repoPath,
   clean,
@@ -460,7 +460,6 @@ export function WatchRunner({
           lensContext = `Overview: ${lensFile.overview}
 
 Important folders: ${lensFile.importantFolders.join(", ")}
-${lensFile.securityIssues.length > 0 ? `\nKnown security issues:\n${lensFile.securityIssues.map((s) => `- ${s}`).join("\n")}` : ""}
 ${lensFile.suggestions.length > 0 ? `\nProject suggestions:\n${lensFile.suggestions.map((s) => `- ${s}`).join("\n")}` : ""}`;
         }
       }

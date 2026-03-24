@@ -1,34 +1,17 @@
 import React from "react";
 import { Box, Text, Static, useInput } from "ink";
 import Spinner from "ink-spinner";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import path from "path";
 import os from "os";
 import TextInput from "ink-text-input";
 import { ACCENT } from "../../colors";
-import { buildDiffs } from "../repo/DiffViewer";
 import { ProviderPicker } from "../provider/ProviderPicker";
-import { fetchFileTree, readImportantFiles } from "../../utils/files";
 import { startCloneRepo } from "../../utils/repo";
 import { useThinkingPhrase } from "../../utils/thinking";
-import {
-  walkDir,
-  readClipboard,
-  applyPatches,
-  extractGithubUrl,
-  toCloneUrl,
-  parseCloneTag,
-  buildSystemPrompt,
-  parseResponse,
-  callChat,
-} from "../../utils/chat";
-import {
-  saveChat,
-  loadChat,
-  listChats,
-  deleteChat,
-  getChatNameSuggestions,
-} from "../../utils/chatHistory";
+import { walkDir, applyPatches, toCloneUrl } from "../../utils/chat";
+import { appendMemory } from "../../utils/memory";
+import { getChatNameSuggestions, saveChat } from "../../utils/chatHistory";
 import { StaticMessage } from "./ChatMessage";
 import {
   PermissionPrompt,
@@ -44,48 +27,19 @@ import {
   ViewingFileView,
 } from "./ChatOverlays";
 import { TimelineRunner } from "../timeline/TimelineRunner";
-import type { Provider } from "../../types/config";
-import type { Message, ChatStage } from "../../types/chat";
-import {
-  appendMemory,
-  buildMemorySummary,
-  clearRepoMemory,
-  addMemory,
-  deleteMemory,
-  listMemories,
-} from "../../utils/memory";
-import { readLensFile } from "../../utils/lensfile";
 import { ReviewCommand } from "../../commands/review";
-import { registry } from "../../utils/tools/registry";
+import type { Message } from "../../types/chat";
+import { useChat } from "./hooks/useChat";
+import { useChatInput } from "./hooks/useChatInput";
+import { handleCommand, COMMANDS } from "./hooks/useCommandHandlers";
 
-const COMMANDS = [
-  { cmd: "/timeline", desc: "browse commit history" },
-  { cmd: "/clear history", desc: "wipe session memory for this repo" },
-  { cmd: "/review", desc: "review current codebase" },
-  { cmd: "/auto", desc: "toggle auto-approve for read/search tools" },
-  {
-    cmd: "/auto --force-all",
-    desc: "auto-approve ALL tools including shell and writes (⚠ dangerous)",
-  },
-  { cmd: "/chat", desc: "chat history commands" },
-  { cmd: "/chat list", desc: "list saved chats for this repo" },
-  { cmd: "/chat load", desc: "load a saved chat by name" },
-  { cmd: "/chat rename", desc: "rename the current chat" },
-  { cmd: "/chat delete", desc: "delete a saved chat by name" },
-  { cmd: "/memory", desc: "memory commands" },
-  { cmd: "/memory list", desc: "list all memories for this repo" },
-  { cmd: "/memory add", desc: "add a memory" },
-  { cmd: "/memory delete", desc: "delete a memory by id" },
-  { cmd: "/memory clear", desc: "clear all memories for this repo" },
-];
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function CommandPalette({
   query,
-  onSelect,
   recentChats,
 }: {
   query: string;
-  onSelect: (cmd: string) => void;
   recentChats: string[];
 }) {
   const q = query.toLowerCase();
@@ -139,7 +93,6 @@ function ForceAllWarning({
   onConfirm: (confirmed: boolean) => void;
 }) {
   const [input, setInput] = useState("");
-
   return (
     <Box flexDirection="column" marginY={1} gap={1}>
       <Box gap={1}>
@@ -196,746 +149,18 @@ function ForceAllWarning({
   );
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
-  const [stage, setStage] = useState<ChatStage>({ type: "picking-provider" });
-  const [committed, setCommitted] = useState<Message[]>([]);
-  const [provider, setProvider] = useState<Provider | null>(null);
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [inputValue, setInputValue] = useState("");
-  const [pendingMsgIndex, setPendingMsgIndex] = useState<number | null>(null);
-  const [allMessages, setAllMessages] = useState<Message[]>([]);
-  const [clonedUrls, setClonedUrls] = useState<Set<string>>(new Set());
-  const [showTimeline, setShowTimeline] = useState(false);
-  const [showReview, setShowReview] = useState(false);
-  const [autoApprove, setAutoApprove] = useState(false);
-  const [forceApprove, setForceApprove] = useState(false);
-  const [showForceWarning, setShowForceWarning] = useState(false);
-  const [chatName, setChatName] = useState<string | null>(null);
-  const chatNameRef = useRef<string | null>(null);
-  const [recentChats, setRecentChats] = useState<string[]>([]);
-  const inputHistoryRef = useRef<string[]>([]);
-  const historyIndexRef = useRef<number>(-1);
-  const [inputKey, setInputKey] = useState(0);
+  const chat = useChat(repoPath);
+  const thinkingPhrase = useThinkingPhrase(chat.stage.type === "thinking");
 
-  const providerRef = useRef<Provider | null>(null);
-  const systemPromptRef = useRef<string>("");
+  // Stage-level key handler (clone offers, preview, permission, etc.)
+  const handleStageKey = (input: string, key: any) => {
+    const { stage } = chat;
 
-  const updateChatName = (name: string) => {
-    chatNameRef.current = name;
-    setChatName(name);
-  };
-
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const toolResultCache = useRef<Map<string, string>>(new Map());
-  const batchApprovedRef = useRef(false);
-
-  const thinkingPhrase = useThinkingPhrase(stage.type === "thinking");
-
-  React.useEffect(() => {
-    const chats = listChats(repoPath);
-    setRecentChats(chats.slice(0, 10).map((c) => c.name));
-  }, [repoPath]);
-
-  React.useEffect(() => {
-    if (chatNameRef.current && allMessages.length > 1) {
-      saveChat(chatNameRef.current, repoPath, allMessages);
-    }
-  }, [allMessages]);
-
-  React.useEffect(() => {
-    providerRef.current = provider;
-  }, [provider]);
-
-  React.useEffect(() => {
-    systemPromptRef.current = systemPrompt;
-  }, [systemPrompt]);
-
-  const handleError = (currentAll: Message[]) => (err: unknown) => {
-    batchApprovedRef.current = false;
-    if (err instanceof Error && err.name === "AbortError") {
-      setStage({ type: "idle" });
-      return;
-    }
-    const errMsg: Message = {
-      role: "assistant",
-      content: `Error: ${err instanceof Error ? err.message : "Something went wrong"}`,
-      type: "text",
-    };
-    setAllMessages([...currentAll, errMsg]);
-    setCommitted((prev) => [...prev, errMsg]);
-    setStage({ type: "idle" });
-  };
-
-  const TOOL_TAG_NAMES = [
-    "shell",
-    "fetch",
-    "read-file",
-    "read-folder",
-    "grep",
-    "write-file",
-    "delete-file",
-    "delete-folder",
-    "open-url",
-    "generate-pdf",
-    "search",
-    "clone",
-    "changes",
-  ];
-
-  function isLikelyTruncated(text: string): boolean {
-    return TOOL_TAG_NAMES.some(
-      (tag) => text.includes(`<${tag}>`) && !text.includes(`</${tag}>`),
-    );
-  }
-
-  const processResponse = (
-    raw: string,
-    currentAll: Message[],
-    signal: AbortSignal,
-  ) => {
-    if (signal.aborted) {
-      batchApprovedRef.current = false;
-      setStage({ type: "idle" });
-      return;
-    }
-
-    if (isLikelyTruncated(raw)) {
-      const truncMsg: Message = {
-        role: "assistant",
-        content:
-          "(response cut off — the model hit its output limit mid-tool-call. Try asking it to continue, or simplify the request.)",
-        type: "text",
-      };
-      setAllMessages([...currentAll, truncMsg]);
-      setCommitted((prev) => [...prev, truncMsg]);
-      setStage({ type: "idle" });
-      return;
-    }
-
-    const memAddMatches = [
-      ...raw.matchAll(/<memory-add>([\s\S]*?)<\/memory-add>/g),
-    ];
-    const memDelMatches = [
-      ...raw.matchAll(/<memory-delete>([\s\S]*?)<\/memory-delete>/g),
-    ];
-    for (const match of memAddMatches) {
-      const content = match[1]!.trim();
-      if (content) addMemory(content, repoPath);
-    }
-    for (const match of memDelMatches) {
-      const id = match[1]!.trim();
-      if (id) deleteMemory(id, repoPath);
-    }
-    const cleanRaw = raw
-      .replace(/<memory-add>[\s\S]*?<\/memory-add>/g, "")
-      .replace(/<memory-delete>[\s\S]*?<\/memory-delete>/g, "")
-      .trim();
-
-    const parsed = parseResponse(cleanRaw);
-
-    if (parsed.kind === "changes") {
-      batchApprovedRef.current = false;
-      if (parsed.patches.length === 0) {
-        const msg: Message = {
-          role: "assistant",
-          content: parsed.content,
-          type: "text",
-        };
-        setAllMessages([...currentAll, msg]);
-        setCommitted((prev) => [...prev, msg]);
-        setStage({ type: "idle" });
-        return;
-      }
-      const assistantMsg: Message = {
-        role: "assistant",
-        content: parsed.content,
-        type: "plan",
-        patches: parsed.patches,
-        applied: false,
-      };
-      const withAssistant = [...currentAll, assistantMsg];
-      setAllMessages(withAssistant);
-      setPendingMsgIndex(withAssistant.length - 1);
-      const diffLines = buildDiffs(repoPath, parsed.patches);
-      setStage({
-        type: "preview",
-        patches: parsed.patches,
-        diffLines,
-        scrollOffset: 0,
-        pendingMessages: currentAll,
-      });
-      return;
-    }
-
-    if (parsed.kind === "clone") {
-      batchApprovedRef.current = false;
-      if (parsed.content) {
-        const preambleMsg: Message = {
-          role: "assistant",
-          content: parsed.content,
-          type: "text",
-        };
-        setAllMessages([...currentAll, preambleMsg]);
-        setCommitted((prev) => [...prev, preambleMsg]);
-      }
-      setStage({
-        type: "clone-offer",
-        repoUrl: parsed.repoUrl,
-        launchAnalysis: true,
-      });
-      return;
-    }
-
-    if (parsed.kind === "text") {
-      batchApprovedRef.current = false;
-
-      if (!parsed.content.trim()) {
-        const stallMsg: Message = {
-          role: "assistant",
-          content:
-            '(no response — the model may have stalled. Try sending a short follow-up like "continue" or start a new message.)',
-          type: "text",
-        };
-        setAllMessages([...currentAll, stallMsg]);
-        setCommitted((prev) => [...prev, stallMsg]);
-        setStage({ type: "idle" });
-        return;
-      }
-
-      const msg: Message = {
-        role: "assistant",
-        content: parsed.content,
-        type: "text",
-      };
-      const withMsg = [...currentAll, msg];
-      setAllMessages(withMsg);
-      setCommitted((prev) => [...prev, msg]);
-      const lastUserMsg = [...currentAll]
-        .reverse()
-        .find((m) => m.role === "user");
-      const githubUrl = lastUserMsg
-        ? extractGithubUrl(lastUserMsg.content)
-        : null;
-      if (githubUrl && !clonedUrls.has(githubUrl)) {
-        setTimeout(
-          () => setStage({ type: "clone-offer", repoUrl: githubUrl }),
-          80,
-        );
-      } else {
-        setStage({ type: "idle" });
-      }
-      return;
-    }
-
-    const tool = registry.get(parsed.toolName);
-    if (!tool) {
-      batchApprovedRef.current = false;
-      setStage({ type: "idle" });
-      return;
-    }
-
-    if (parsed.content) {
-      const preambleMsg: Message = {
-        role: "assistant",
-        content: parsed.content,
-        type: "text",
-      };
-      setAllMessages([...currentAll, preambleMsg]);
-      setCommitted((prev) => [...prev, preambleMsg]);
-    }
-
-    const remainder = parsed.remainder;
-    const isSafe = tool.safe ?? false;
-
-    const executeAndContinue = async (approved: boolean) => {
-      if (approved && remainder) {
-        batchApprovedRef.current = true;
-      }
-
-      const currentProvider = providerRef.current;
-      const currentSystemPrompt = systemPromptRef.current;
-
-      if (!currentProvider) {
-        batchApprovedRef.current = false;
-        setStage({ type: "idle" });
-        return;
-      }
-
-      let result = "(denied by user)";
-
-      if (approved) {
-        const cacheKey = isSafe
-          ? `${parsed.toolName}:${parsed.rawInput}`
-          : null;
-        if (cacheKey && toolResultCache.current.has(cacheKey)) {
-          result =
-            toolResultCache.current.get(cacheKey)! +
-            "\n\n[NOTE: This result was already retrieved earlier. Do not request it again.]";
-        } else {
-          try {
-            setStage({ type: "thinking" });
-            const toolResult = await tool.execute(parsed.input, {
-              repoPath,
-              messages: currentAll,
-            });
-            result = toolResult.value;
-            if (cacheKey && toolResult.kind === "text") {
-              toolResultCache.current.set(cacheKey, result);
-            }
-          } catch (err: unknown) {
-            result = `Error: ${err instanceof Error ? err.message : "failed"}`;
-          }
-        }
-      }
-
-      if (approved && !result.startsWith("Error:")) {
-        appendMemory({
-          kind: "shell-run",
-          detail: tool.summariseInput
-            ? String(tool.summariseInput(parsed.input))
-            : parsed.rawInput,
-          summary: result.split("\n")[0]?.slice(0, 120) ?? "",
-        });
-      }
-
-      const displayContent = tool.summariseInput
-        ? String(tool.summariseInput(parsed.input))
-        : parsed.rawInput;
-
-      const toolMsg: Message = {
-        role: "assistant",
-        type: "tool",
-        toolName: parsed.toolName as any,
-        content: displayContent,
-        result,
-        approved,
-      };
-
-      const withTool = [...currentAll, toolMsg];
-      setAllMessages(withTool);
-      setCommitted((prev) => [...prev, toolMsg]);
-
-      if (approved && remainder && remainder.length > 0) {
-        processResponse(remainder, withTool, signal);
-        return;
-      }
-
-      batchApprovedRef.current = false;
-
-      const nextAbort = new AbortController();
-      abortControllerRef.current = nextAbort;
-      setStage({ type: "thinking" });
-
-      callChat(currentProvider, currentSystemPrompt, withTool, nextAbort.signal)
-        .then((r: string) => {
-          if (nextAbort.signal.aborted) return;
-          if (!r.trim()) {
-            const nudged: Message[] = [
-              ...withTool,
-              { role: "user", content: "Please continue.", type: "text" },
-            ];
-            return callChat(
-              currentProvider,
-              currentSystemPrompt,
-              nudged,
-              nextAbort.signal,
-            );
-          }
-          return r;
-        })
-        .then((r: string | undefined) => {
-          if (nextAbort.signal.aborted) return;
-          processResponse(r ?? "", withTool, nextAbort.signal);
-        })
-        .catch(handleError(withTool));
-    };
-
-    if (forceApprove || (autoApprove && isSafe) || batchApprovedRef.current) {
-      executeAndContinue(true);
-      return;
-    }
-
-    const permLabel = tool.permissionLabel ?? tool.name;
-    const permValue = tool.summariseInput
-      ? String(tool.summariseInput(parsed.input))
-      : parsed.rawInput;
-
-    setStage({
-      type: "permission",
-      tool: {
-        type: parsed.toolName as any,
-        _display: permValue,
-        _label: permLabel,
-      } as any,
-      pendingMessages: currentAll,
-      resolve: executeAndContinue,
-    });
-  };
-
-  const sendMessage = (text: string) => {
-    if (!provider) return;
-
-    if (text.trim().toLowerCase() === "/timeline") {
-      setShowTimeline(true);
-      return;
-    }
-    if (text.trim().toLowerCase() === "/review") {
-      setShowReview(true);
-      return;
-    }
-
-    if (text.trim().toLowerCase() === "/auto --force-all") {
-      if (forceApprove) {
-        setForceApprove(false);
-        setAutoApprove(false);
-        const msg: Message = {
-          role: "assistant",
-          content: "Force-all mode OFF — tools will ask for permission again.",
-          type: "text",
-        };
-        setCommitted((prev) => [...prev, msg]);
-        setAllMessages((prev) => [...prev, msg]);
-      } else {
-        setShowForceWarning(true);
-      }
-      return;
-    }
-
-    if (text.trim().toLowerCase() === "/auto") {
-      if (forceApprove) {
-        setForceApprove(false);
-        setAutoApprove(true);
-        const msg: Message = {
-          role: "assistant",
-          content:
-            "Force-all mode OFF — switched to normal auto-approve (safe tools only).",
-          type: "text",
-        };
-        setCommitted((prev) => [...prev, msg]);
-        setAllMessages((prev) => [...prev, msg]);
-        return;
-      }
-      const next = !autoApprove;
-      setAutoApprove(next);
-      const msg: Message = {
-        role: "assistant",
-        content: next
-          ? "Auto-approve ON — safe tools (read, search, fetch) will run without asking."
-          : "Auto-approve OFF — all tools will ask for permission.",
-        type: "text",
-      };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    if (text.trim().toLowerCase() === "/clear history") {
-      clearRepoMemory(repoPath);
-      const msg: Message = {
-        role: "assistant",
-        content: "History cleared for this repo.",
-        type: "text",
-      };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    if (text.trim().toLowerCase() === "/chat") {
-      const msg: Message = {
-        role: "assistant",
-        content:
-          "Chat commands: `/chat list` · `/chat load <n>` · `/chat rename <n>` · `/chat delete <n>`",
-        type: "text",
-      };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    if (text.trim().toLowerCase().startsWith("/chat rename")) {
-      const parts = text.trim().split(/\s+/);
-      const newName = parts.slice(2).join("-");
-      if (!newName) {
-        const msg: Message = {
-          role: "assistant",
-          content: "Usage: `/chat rename <new-name>`",
-          type: "text",
-        };
-        setCommitted((prev) => [...prev, msg]);
-        setAllMessages((prev) => [...prev, msg]);
-        return;
-      }
-      const oldName = chatNameRef.current;
-      if (oldName) deleteChat(oldName);
-      updateChatName(newName);
-      saveChat(newName, repoPath, allMessages);
-      setRecentChats((prev) =>
-        [newName, ...prev.filter((n) => n !== newName && n !== oldName)].slice(
-          0,
-          10,
-        ),
-      );
-      const msg: Message = {
-        role: "assistant",
-        content: `Chat renamed to **${newName}**.`,
-        type: "text",
-      };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    if (text.trim().toLowerCase().startsWith("/chat delete")) {
-      const parts = text.trim().split(/\s+/);
-      const name = parts.slice(2).join("-");
-      if (!name) {
-        const msg: Message = {
-          role: "assistant",
-          content: "Usage: `/chat delete <n>`",
-          type: "text",
-        };
-        setCommitted((prev) => [...prev, msg]);
-        setAllMessages((prev) => [...prev, msg]);
-        return;
-      }
-      const deleted = deleteChat(name);
-      if (!deleted) {
-        const msg: Message = {
-          role: "assistant",
-          content: `Chat **${name}** not found.`,
-          type: "text",
-        };
-        setCommitted((prev) => [...prev, msg]);
-        setAllMessages((prev) => [...prev, msg]);
-        return;
-      }
-      if (chatNameRef.current === name) {
-        chatNameRef.current = null;
-        setChatName(null);
-      }
-      setRecentChats((prev) => prev.filter((n) => n !== name));
-      const msg: Message = {
-        role: "assistant",
-        content: `Chat **${name}** deleted.`,
-        type: "text",
-      };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    if (text.trim().toLowerCase() === "/chat list") {
-      const chats = listChats(repoPath);
-      const content =
-        chats.length === 0
-          ? "No saved chats for this repo yet."
-          : `Saved chats:\n\n${chats
-              .map(
-                (c) =>
-                  `- **${c.name}** · ${c.userMessageCount} messages · ${new Date(c.savedAt).toLocaleString()}`,
-              )
-              .join("\n")}`;
-      const msg: Message = { role: "assistant", content, type: "text" };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    if (text.trim().toLowerCase().startsWith("/chat load")) {
-      const parts = text.trim().split(/\s+/);
-      const name = parts.slice(2).join("-");
-      if (!name) {
-        const chats = listChats(repoPath);
-        const content =
-          chats.length === 0
-            ? "No saved chats found."
-            : `Specify a chat name. Recent chats:\n\n${chats
-                .slice(0, 10)
-                .map((c) => `- **${c.name}**`)
-                .join("\n")}`;
-        const msg: Message = { role: "assistant", content, type: "text" };
-        setCommitted((prev) => [...prev, msg]);
-        setAllMessages((prev) => [...prev, msg]);
-        return;
-      }
-      const saved = loadChat(name);
-      if (!saved) {
-        const msg: Message = {
-          role: "assistant",
-          content: `Chat **${name}** not found. Use \`/chat list\` to see saved chats.`,
-          type: "text",
-        };
-        setCommitted((prev) => [...prev, msg]);
-        setAllMessages((prev) => [...prev, msg]);
-        return;
-      }
-      updateChatName(name);
-      setAllMessages(saved.messages);
-      setCommitted(saved.messages);
-      const notice: Message = {
-        role: "assistant",
-        content: `Loaded chat **${name}** · ${saved.userMessageCount} messages · saved ${new Date(saved.savedAt).toLocaleString()}`,
-        type: "text",
-      };
-      setCommitted((prev) => [...prev, notice]);
-      setAllMessages((prev) => [...prev, notice]);
-      return;
-    }
-
-    if (
-      text.trim().toLowerCase() === "/memory list" ||
-      text.trim().toLowerCase() === "/memory"
-    ) {
-      const mems = listMemories(repoPath);
-      const content =
-        mems.length === 0
-          ? "No memories stored for this repo yet."
-          : `Memories for this repo:\n\n${mems
-              .map((m) => `- [${m.id}] ${m.content}`)
-              .join("\n")}`;
-      const msg: Message = { role: "assistant", content, type: "text" };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    if (text.trim().toLowerCase().startsWith("/memory add")) {
-      const content = text.trim().slice("/memory add".length).trim();
-      if (!content) {
-        const msg: Message = {
-          role: "assistant",
-          content: "Usage: `/memory add <content>`",
-          type: "text",
-        };
-        setCommitted((prev) => [...prev, msg]);
-        setAllMessages((prev) => [...prev, msg]);
-        return;
-      }
-      const mem = addMemory(content, repoPath);
-      const msg: Message = {
-        role: "assistant",
-        content: `Memory saved **[${mem.id}]**: ${mem.content}`,
-        type: "text",
-      };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    if (text.trim().toLowerCase().startsWith("/memory delete")) {
-      const id = text.trim().split(/\s+/)[2];
-      if (!id) {
-        const msg: Message = {
-          role: "assistant",
-          content: "Usage: `/memory delete <id>`",
-          type: "text",
-        };
-        setCommitted((prev) => [...prev, msg]);
-        setAllMessages((prev) => [...prev, msg]);
-        return;
-      }
-      const deleted = deleteMemory(id, repoPath);
-      const msg: Message = {
-        role: "assistant",
-        content: deleted
-          ? `Memory **[${id}]** deleted.`
-          : `Memory **[${id}]** not found.`,
-        type: "text",
-      };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    if (text.trim().toLowerCase() === "/memory clear") {
-      clearRepoMemory(repoPath);
-      const msg: Message = {
-        role: "assistant",
-        content: "All memories cleared for this repo.",
-        type: "text",
-      };
-      setCommitted((prev) => [...prev, msg]);
-      setAllMessages((prev) => [...prev, msg]);
-      return;
-    }
-
-    const userMsg: Message = { role: "user", content: text, type: "text" };
-    const nextAll = [...allMessages, userMsg];
-    setCommitted((prev) => [...prev, userMsg]);
-    setAllMessages(nextAll);
-    batchApprovedRef.current = false;
-
-    inputHistoryRef.current = [
-      text,
-      ...inputHistoryRef.current.filter((m) => m !== text),
-    ].slice(0, 50);
-    historyIndexRef.current = -1;
-
-    if (!chatName) {
-      const name =
-        getChatNameSuggestions(nextAll)[0] ??
-        `chat-${new Date().toISOString().slice(0, 10)}`;
-      updateChatName(name);
-      setRecentChats((prev) =>
-        [name, ...prev.filter((n) => n !== name)].slice(0, 10),
-      );
-      saveChat(name, repoPath, nextAll);
-    }
-
-    const abort = new AbortController();
-    abortControllerRef.current = abort;
-
-    setStage({ type: "thinking" });
-    callChat(provider, systemPrompt, nextAll, abort.signal)
-      .then((raw: string) => processResponse(raw, nextAll, abort.signal))
-      .catch(handleError(nextAll));
-  };
-
-  useInput((input, key) => {
-    if (showTimeline) return;
-
-    if (showForceWarning && key.escape) {
-      setShowForceWarning(false);
-      return;
-    }
-
-    if (stage.type === "thinking" && key.escape) {
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = null;
-      batchApprovedRef.current = false;
-      setStage({ type: "idle" });
-      return;
-    }
-
-    if (stage.type === "idle") {
-      if (key.ctrl && input === "c") {
-        process.exit(0);
-        return;
-      }
-      if (key.upArrow && inputHistoryRef.current.length > 0) {
-        const next = Math.min(
-          historyIndexRef.current + 1,
-          inputHistoryRef.current.length - 1,
-        );
-        historyIndexRef.current = next;
-        setInputValue(inputHistoryRef.current[next]!);
-        setInputKey((k) => k + 1);
-        return;
-      }
-      if (key.downArrow) {
-        const next = historyIndexRef.current - 1;
-        historyIndexRef.current = next;
-        setInputValue(next < 0 ? "" : inputHistoryRef.current[next]!);
-        setInputKey((k) => k + 1);
-        return;
-      }
-      if (key.tab && inputValue.startsWith("/")) {
-        const q = inputValue.toLowerCase();
-        const match = COMMANDS.find((c) => c.cmd.startsWith(q));
-        if (match) setInputValue(match.cmd);
-        return;
-      }
+    if (chat.showForceWarning && key.escape) {
+      chat.setShowForceWarning(false);
       return;
     }
 
@@ -944,7 +169,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         const { repoUrl } = stage;
         const launch = stage.launchAnalysis ?? false;
         const cloneUrl = toCloneUrl(repoUrl);
-        setStage({ type: "cloning", repoUrl });
+        chat.setStage({ type: "cloning", repoUrl });
         startCloneRepo(cloneUrl).then((result) => {
           if (result.done) {
             const repoName =
@@ -959,8 +184,8 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
               detail: repoUrl,
               summary: `Cloned ${repoName} — ${fileCount} files`,
             });
-            setClonedUrls((prev) => new Set([...prev, repoUrl]));
-            setStage({
+            chat.setClonedUrls((prev) => new Set([...prev, repoUrl]));
+            chat.setStage({
               type: "clone-done",
               repoUrl,
               destPath,
@@ -968,13 +193,13 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
               launchAnalysis: launch,
             });
           } else if (result.folderExists && result.repoPath) {
-            setStage({
+            chat.setStage({
               type: "clone-exists",
               repoUrl,
               repoPath: result.repoPath,
             });
           } else {
-            setStage({
+            chat.setStage({
               type: "clone-error",
               message:
                 !result.folderExists && result.error
@@ -986,25 +211,25 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         return;
       }
       if (input === "n" || input === "N" || key.escape)
-        setStage({ type: "idle" });
+        chat.setStage({ type: "idle" });
       return;
     }
 
     if (stage.type === "clone-exists") {
       if (input === "y" || input === "Y") {
         const { repoUrl, repoPath: existingPath } = stage;
-        setStage({ type: "cloning", repoUrl });
+        chat.setStage({ type: "cloning", repoUrl });
         startCloneRepo(toCloneUrl(repoUrl), { forceReclone: true }).then(
           (result) => {
             if (result.done) {
-              setStage({
+              chat.setStage({
                 type: "clone-done",
                 repoUrl,
                 destPath: existingPath,
                 fileCount: walkDir(existingPath).length,
               });
             } else {
-              setStage({
+              chat.setStage({
                 type: "clone-error",
                 message:
                   !result.folderExists && result.error
@@ -1018,7 +243,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       }
       if (input === "n" || input === "N") {
         const { repoUrl, repoPath: existingPath } = stage;
-        setStage({
+        chat.setStage({
           type: "clone-done",
           repoUrl,
           destPath: existingPath,
@@ -1046,12 +271,11 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
             result: `Clone complete. Repo: ${repoName}. Local path: ${stage.destPath}. ${stage.fileCount} files.`,
             approved: true,
           };
-          const withClone = [...allMessages, contextMsg, summaryMsg];
-          setAllMessages(withClone);
-          setCommitted((prev) => [...prev, summaryMsg]);
-          setStage({ type: "idle" });
+          chat.setAllMessages([...chat.allMessages, contextMsg, summaryMsg]);
+          chat.setCommitted((prev) => [...prev, summaryMsg]);
+          chat.setStage({ type: "idle" });
         } else {
-          setStage({ type: "idle" });
+          chat.setStage({ type: "idle" });
         }
       }
       return;
@@ -1065,7 +289,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         return;
       }
       if (input === "n" || input === "N" || key.escape) {
-        batchApprovedRef.current = false;
+        chat.batchApprovedRef.current = false;
         stage.resolve(false);
         return;
       }
@@ -1074,113 +298,117 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
 
     if (stage.type === "preview") {
       if (key.upArrow) {
-        setStage({
+        chat.setStage({
           ...stage,
           scrollOffset: Math.max(0, stage.scrollOffset - 1),
         });
         return;
       }
       if (key.downArrow) {
-        setStage({ ...stage, scrollOffset: stage.scrollOffset + 1 });
+        chat.setStage({ ...stage, scrollOffset: stage.scrollOffset + 1 });
         return;
       }
       if (key.escape || input === "s" || input === "S") {
-        if (pendingMsgIndex !== null) {
-          const msg = allMessages[pendingMsgIndex];
+        if (chat.pendingMsgIndex !== null) {
+          const msg = chat.allMessages[chat.pendingMsgIndex];
           if (msg?.type === "plan") {
-            setCommitted((prev) => [...prev, { ...msg, applied: false }]);
-            appendMemory({
-              kind: "code-skipped",
-              detail: msg.patches
-                .map((p: { path: string }) => p.path)
-                .join(", "),
-              summary: `Skipped changes to ${msg.patches.length} file(s)`,
-            });
+            chat.setCommitted((prev) => [...prev, { ...msg, applied: false }]);
+            chat.skipPatches(msg.patches);
           }
         }
-        setPendingMsgIndex(null);
-        setStage({ type: "idle" });
+        chat.setPendingMsgIndex(null);
+        chat.setStage({ type: "idle" });
         return;
       }
       if (key.return || input === "a" || input === "A") {
-        try {
-          applyPatches(repoPath, stage.patches);
-          appendMemory({
-            kind: "code-applied",
-            detail: stage.patches.map((p) => p.path).join(", "),
-            summary: `Applied changes to ${stage.patches.length} file(s)`,
-          });
-        } catch {
-          /* non-fatal */
-        }
-        if (pendingMsgIndex !== null) {
-          const msg = allMessages[pendingMsgIndex];
+        if (chat.pendingMsgIndex !== null) {
+          const msg = chat.allMessages[chat.pendingMsgIndex];
           if (msg?.type === "plan") {
+            chat.applyPatchesAndContinue(msg.patches);
             const applied: Message = { ...msg, applied: true };
-            setAllMessages((prev) =>
-              prev.map((m, i) => (i === pendingMsgIndex ? applied : m)),
+            chat.setAllMessages((prev) =>
+              prev.map((m, i) => (i === chat.pendingMsgIndex ? applied : m)),
             );
-            setCommitted((prev) => [...prev, applied]);
+            chat.setCommitted((prev) => [...prev, applied]);
           }
         }
-        setPendingMsgIndex(null);
-        setStage({ type: "idle" });
+        chat.setPendingMsgIndex(null);
+        chat.setStage({ type: "idle" });
         return;
       }
     }
 
     if (stage.type === "viewing-file") {
       if (key.upArrow) {
-        setStage({
+        chat.setStage({
           ...stage,
           scrollOffset: Math.max(0, stage.scrollOffset - 1),
         });
         return;
       }
       if (key.downArrow) {
-        setStage({ ...stage, scrollOffset: stage.scrollOffset + 1 });
+        chat.setStage({ ...stage, scrollOffset: stage.scrollOffset + 1 });
         return;
       }
       if (key.escape || key.return) {
-        setStage({ type: "idle" });
+        chat.setStage({ type: "idle" });
         return;
       }
     }
-  });
-
-  const handleProviderDone = (p: Provider) => {
-    setProvider(p);
-    providerRef.current = p;
-    setStage({ type: "loading" });
-    fetchFileTree(repoPath)
-      .catch(() => walkDir(repoPath))
-      .then((fileTree) => {
-        const importantFiles = readImportantFiles(repoPath, fileTree);
-        const historySummary = buildMemorySummary(repoPath);
-        const lensFile = readLensFile(repoPath);
-        const lensContext = lensFile
-          ? `\n\n## LENS.md (previous analysis)\n${lensFile.overview}\n\nImportant folders: ${lensFile.importantFolders.join(", ")}\nSuggestions: ${lensFile.suggestions.slice(0, 3).join("; ")}`
-          : "";
-        const toolsSection = registry.buildSystemPromptSection();
-        const prompt =
-          buildSystemPrompt(importantFiles, historySummary, toolsSection) +
-          lensContext;
-        setSystemPrompt(prompt);
-        systemPromptRef.current = prompt;
-        const greeting: Message = {
-          role: "assistant",
-          content: `Welcome to Lens\nCodebase loaded — ${importantFiles.length} files indexed.${historySummary ? "\n\nI have memory of previous actions in this repo." : ""}${lensFile ? "\n\nFound LENS.md — I have context from a previous analysis of this repo." : ""}\nAsk me anything, tell me what to build, share a URL, or ask me to read/write files.\n\nTip: type /timeline to browse commit history.`,
-          type: "text",
-        };
-        setCommitted([greeting]);
-        setAllMessages([greeting]);
-        setStage({ type: "idle" });
-      })
-      .catch(() => setStage({ type: "idle" }));
   };
 
+  const chatInput = useChatInput(
+    chat.stage,
+    chat.showTimeline,
+    chat.showForceWarning,
+    chat.abortThinking,
+    handleStageKey,
+  );
+
+  const sendMessage = (text: string) => {
+    if (!chat.provider) return;
+
+    const handled = handleCommand(text, {
+      repoPath,
+      allMessages: chat.allMessages,
+      autoApprove: chat.autoApprove,
+      forceApprove: chat.forceApprove,
+      chatName: chat.chatName,
+      chatNameRef: chat.chatNameRef,
+      setShowTimeline: chat.setShowTimeline,
+      setShowReview: chat.setShowReview,
+      setShowForceWarning: chat.setShowForceWarning,
+      setForceApprove: chat.setForceApprove,
+      setAutoApprove: chat.setAutoApprove,
+      setAllMessages: chat.setAllMessages as any,
+      setCommitted: chat.setCommitted as any,
+      setRecentChats: chat.setRecentChats,
+      updateChatName: chat.updateChatName,
+    });
+
+    if (handled) return;
+
+    chatInput.pushHistory(text);
+    chat.sendMessage(text, chat.provider, chat.systemPrompt, chat.allMessages);
+
+    if (!chat.chatName) {
+      const name =
+        getChatNameSuggestions([
+          ...chat.allMessages,
+          { role: "user", content: text, type: "text" },
+        ])[0] ?? `chat-${new Date().toISOString().slice(0, 10)}`;
+      chat.updateChatName(name);
+      chat.setRecentChats((prev) =>
+        [name, ...prev.filter((n) => n !== name)].slice(0, 10),
+      );
+    }
+  };
+
+  const { stage } = chat;
+
+  // ─── Route to sub-views ───────────────────────────────────────────────────
   if (stage.type === "picking-provider")
-    return <ProviderPicker onDone={handleProviderDone} />;
+    return <ProviderPicker onDone={chat.handleProviderDone} />;
   if (stage.type === "loading")
     return (
       <Box gap={1} marginTop={1}>
@@ -1193,68 +421,68 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         </Text>
       </Box>
     );
-  if (showTimeline)
+  if (chat.showTimeline)
     return (
       <TimelineRunner
         repoPath={repoPath}
-        onExit={() => setShowTimeline(false)}
+        onExit={() => chat.setShowTimeline(false)}
       />
     );
-  if (showReview)
+  if (chat.showReview)
     return (
-      <ReviewCommand path={repoPath} onExit={() => setShowReview(false)} />
+      <ReviewCommand path={repoPath} onExit={() => chat.setShowReview(false)} />
     );
   if (stage.type === "clone-offer")
-    return <CloneOfferView stage={stage} committed={committed} />;
+    return <CloneOfferView stage={stage} committed={chat.committed} />;
   if (stage.type === "cloning")
-    return <CloningView stage={stage} committed={committed} />;
+    return <CloningView stage={stage} committed={chat.committed} />;
   if (stage.type === "clone-exists")
-    return <CloneExistsView stage={stage} committed={committed} />;
+    return <CloneExistsView stage={stage} committed={chat.committed} />;
   if (stage.type === "clone-done")
-    return <CloneDoneView stage={stage} committed={committed} />;
+    return <CloneDoneView stage={stage} committed={chat.committed} />;
   if (stage.type === "clone-error")
-    return <CloneErrorView stage={stage} committed={committed} />;
+    return <CloneErrorView stage={stage} committed={chat.committed} />;
   if (stage.type === "preview")
-    return <PreviewView stage={stage} committed={committed} />;
+    return <PreviewView stage={stage} committed={chat.committed} />;
   if (stage.type === "viewing-file")
-    return <ViewingFileView stage={stage} committed={committed} />;
+    return <ViewingFileView stage={stage} committed={chat.committed} />;
 
+  // ─── Main chat view ───────────────────────────────────────────────────────
   return (
     <Box flexDirection="column">
-      <Static items={committed}>
+      <Static items={chat.committed}>
         {(msg, i) => <StaticMessage key={i} msg={msg} />}
       </Static>
 
-      {/* Force-all warning overlay */}
-      {showForceWarning && (
+      {chat.showForceWarning && (
         <ForceAllWarning
           onConfirm={(confirmed) => {
-            setShowForceWarning(false);
+            chat.setShowForceWarning(false);
             if (confirmed) {
-              setForceApprove(true);
-              setAutoApprove(true);
+              chat.setForceApprove(true);
+              chat.setAutoApprove(true);
               const msg: Message = {
                 role: "assistant",
                 content:
                   "⚡⚡ Force-all mode ON — ALL tools auto-approved including shell and writes. Type /auto --force-all again to disable.",
                 type: "text",
               };
-              setCommitted((prev) => [...prev, msg]);
-              setAllMessages((prev) => [...prev, msg]);
+              chat.setCommitted((prev) => [...prev, msg]);
+              chat.setAllMessages((prev: Message[]) => [...prev, msg]);
             } else {
               const msg: Message = {
                 role: "assistant",
                 content: "Force-all cancelled.",
                 type: "text",
               };
-              setCommitted((prev) => [...prev, msg]);
-              setAllMessages((prev) => [...prev, msg]);
+              chat.setCommitted((prev) => [...prev, msg]);
+              chat.setAllMessages((prev: Message[]) => [...prev, msg]);
             }
           }}
         />
       )}
 
-      {!showForceWarning && stage.type === "thinking" && (
+      {!chat.showForceWarning && stage.type === "thinking" && (
         <Box gap={1}>
           <Text color={ACCENT}>●</Text>
           <TypewriterText text={thinkingPhrase} />
@@ -1264,32 +492,31 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
         </Box>
       )}
 
-      {!showForceWarning && stage.type === "permission" && (
+      {!chat.showForceWarning && stage.type === "permission" && (
         <PermissionPrompt tool={stage.tool} onDecide={stage.resolve} />
       )}
 
-      {!showForceWarning && stage.type === "idle" && (
+      {!chat.showForceWarning && stage.type === "idle" && (
         <Box flexDirection="column">
-          {inputValue.startsWith("/") && (
+          {chatInput.inputValue.startsWith("/") && (
             <CommandPalette
-              query={inputValue}
-              onSelect={(cmd) => setInputValue(cmd)}
-              recentChats={recentChats}
+              query={chatInput.inputValue}
+              recentChats={chat.recentChats}
             />
           )}
           <InputBox
-            value={inputValue}
-            onChange={(v) => {
-              historyIndexRef.current = -1;
-              setInputValue(v);
-            }}
+            value={chatInput.inputValue}
+            onChange={(v) => chatInput.setInputValue(v)}
             onSubmit={(val) => {
               if (val.trim()) sendMessage(val.trim());
-              setInputValue("");
+              chatInput.setInputValue("");
             }}
-            inputKey={inputKey}
+            inputKey={chatInput.inputKey}
           />
-          <ShortcutBar autoApprove={autoApprove} forceApprove={forceApprove} />
+          <ShortcutBar
+            autoApprove={chat.autoApprove}
+            forceApprove={chat.forceApprove}
+          />
         </Box>
       )}
     </Box>

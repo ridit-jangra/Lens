@@ -7,7 +7,7 @@ import { InitCommand } from "./commands/provider";
 import { ReviewCommand } from "./commands/review";
 import { TaskCommand } from "./commands/task";
 import { ChatCommand } from "./commands/chat";
-import { WatchCommand } from "./commands/watch";
+import { RunCommand } from "./commands/run";
 import { TimelineCommand } from "./commands/timeline";
 import { CommitCommand } from "./commands/commit";
 import { registerBuiltins } from "./utils/tools/builtins";
@@ -129,7 +129,7 @@ program
       },
     ) => {
       render(
-        <WatchCommand
+        <RunCommand
           cmd={cmd}
           path={opts.path}
           clean={opts.clean ?? false}
