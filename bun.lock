@@ -4,7 +4,7 @@
   "workspaces": {
     "": {
       "dependencies": {
-        "@ridit/lens-sdk": "0.1.6",
+        "@ridit/lens-sdk": "^0.2.0",
         "asciichart": "^1.5.25",
         "bun": "^1.3.11",
         "commander": "^14.0.3",
@@ -160,7 +160,7 @@
 
     "@oven/bun-windows-x64-baseline": ["@oven/bun-windows-x64-baseline@1.3.11", "", { "os": "win32", "cpu": "x64" }, "sha512-cCsXK9AQ9Zf18QlVnbrFu2IKfr4sf2sfbErkF2jfCzyCO9Bnhl0KRx63zlN+Ni1xU7gcBLAssgcui5R400N2eA=="],
 
-    "@ridit/lens-sdk": ["@ridit/lens-sdk@0.1.6", "", {}, "sha512-Dinud0eUxerA+fCy/rXOfBpkwDqpbi+ON/j28IR0B+syQ1h60M1UfJTB9W3wXMzZxub4I+9iLQs73O7+Dw9Zhg=="],
+    "@ridit/lens-sdk": ["@ridit/lens-sdk@0.2.0", "", {}, "sha512-Ew3d24kL6WLV8a8xHth8Zx9dRTz0ZR9sVDlY4LgcFjaFzP++th2WiUe3S1wwyH8m6nhwweFEsySY+1VB5nG55A=="],
 
     "@sinclair/typebox": ["@sinclair/typebox@0.34.48", "", {}, "sha512-kKJTNuK3AQOrgjjotVxMrCn1sUJwM76wMszfq1kdU4uYVJjvEWuFQ6HgvLt4Xz3fSmZlTOxJ/Ie13KnIcWQXFA=="],
 

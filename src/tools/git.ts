@@ -27,6 +27,7 @@ function parseArgs(body: string): GitArgs | null {
 export const gitStatusTool: Tool<GitArgs> = {
   name: "git-status",
   description: "show working tree status",
+  tag: "git",
   safe: true,
   permissionLabel: "git status",
   systemPromptEntry: (i) =>
@@ -45,6 +46,7 @@ export const gitStatusTool: Tool<GitArgs> = {
 export const gitLogTool: Tool<GitArgs> = {
   name: "git-log",
   description: "show commit log",
+  tag: "git",
   safe: true,
   permissionLabel: "git log",
   systemPromptEntry: (i) =>
@@ -60,6 +62,7 @@ export const gitLogTool: Tool<GitArgs> = {
 export const gitDiffTool: Tool<GitArgs> = {
   name: "git-diff",
   description: "show changes between commits, working tree, or staged files",
+  tag: "git",
   safe: true,
   permissionLabel: "git diff",
   systemPromptEntry: (i) =>
@@ -75,6 +78,7 @@ export const gitDiffTool: Tool<GitArgs> = {
 export const gitShowTool: Tool<GitArgs> = {
   name: "git-show",
   description: "show a commit's details and stat",
+  tag: "git",
   safe: true,
   permissionLabel: "git show",
   systemPromptEntry: (i) =>
@@ -90,6 +94,7 @@ export const gitShowTool: Tool<GitArgs> = {
 export const gitBranchTool: Tool<GitArgs> = {
   name: "git-branch",
   description: "list branches",
+  tag: "git",
   safe: true,
   permissionLabel: "git branch",
   systemPromptEntry: (i) =>
@@ -105,6 +110,7 @@ export const gitBranchTool: Tool<GitArgs> = {
 export const gitRemoteTool: Tool<GitArgs> = {
   name: "git-remote",
   description: "list or inspect remotes",
+  tag: "git",
   safe: true,
   permissionLabel: "git remote",
   systemPromptEntry: (i) =>
@@ -120,6 +126,7 @@ export const gitRemoteTool: Tool<GitArgs> = {
 export const gitTagTool: Tool<GitArgs> = {
   name: "git-tag",
   description: "list tags",
+  tag: "git",
   safe: true,
   permissionLabel: "git tag",
   systemPromptEntry: (i) =>
@@ -135,6 +142,7 @@ export const gitTagTool: Tool<GitArgs> = {
 export const gitBlameTool: Tool<GitArgs> = {
   name: "git-blame",
   description: "show who last modified each line of a file",
+  tag: "git",
   safe: true,
   permissionLabel: "git blame",
   systemPromptEntry: (i) =>
@@ -168,6 +176,7 @@ export const gitBlameTool: Tool<GitArgs> = {
 export const gitStashListTool: Tool<GitArgs> = {
   name: "git-stash-list",
   description: "list stashed changes",
+  tag: "git",
   safe: true,
   permissionLabel: "git stash list",
   systemPromptEntry: (i) =>
@@ -183,6 +192,7 @@ export const gitStashListTool: Tool<GitArgs> = {
 export const gitAddTool: Tool<GitArgs> = {
   name: "git-add",
   description: "stage files for commit",
+  tag: "git",
   safe: false,
   permissionLabel: "git add",
   systemPromptEntry: (i) =>
@@ -202,6 +212,7 @@ export const gitAddTool: Tool<GitArgs> = {
 export const gitCommitTool: Tool<GitArgs> = {
   name: "git-commit",
   description: "commit staged changes with a message",
+  tag: "git",
   safe: false,
   permissionLabel: "git commit",
   systemPromptEntry: (i) =>
@@ -222,6 +233,7 @@ export const gitCommitTool: Tool<GitArgs> = {
 export const gitCommitAmendTool: Tool<GitArgs> = {
   name: "git-commit-amend",
   description: "amend the last commit message",
+  tag: "git",
   safe: false,
   permissionLabel: "git commit --amend",
   systemPromptEntry: (i) =>
@@ -246,6 +258,7 @@ export const gitRevertTool: Tool<GitArgs> = {
   name: "git-revert",
   description:
     "revert a commit by hash (creates a new revert commit, history preserved)",
+  tag: "git",
   safe: false,
   permissionLabel: "git revert",
   systemPromptEntry: (i) =>
@@ -266,6 +279,7 @@ export const gitRevertTool: Tool<GitArgs> = {
 export const gitResetTool: Tool<GitArgs> = {
   name: "git-reset",
   description: "reset HEAD or unstage files",
+  tag: "git",
   safe: false,
   permissionLabel: "git reset",
   systemPromptEntry: (i) =>
@@ -285,6 +299,7 @@ export const gitResetTool: Tool<GitArgs> = {
 export const gitCheckoutTool: Tool<GitArgs> = {
   name: "git-checkout",
   description: "switch branches or restore files",
+  tag: "git",
   safe: false,
   permissionLabel: "git checkout",
   systemPromptEntry: (i) =>
@@ -305,6 +320,7 @@ export const gitCheckoutTool: Tool<GitArgs> = {
 export const gitSwitchTool: Tool<GitArgs> = {
   name: "git-switch",
   description: "switch or create branches",
+  tag: "git",
   safe: false,
   permissionLabel: "git switch",
   systemPromptEntry: (i) =>
@@ -325,6 +341,7 @@ export const gitSwitchTool: Tool<GitArgs> = {
 export const gitMergeTool: Tool<GitArgs> = {
   name: "git-merge",
   description: "merge a branch into the current branch",
+  tag: "git",
   safe: false,
   permissionLabel: "git merge",
   systemPromptEntry: (i) =>
@@ -345,6 +362,7 @@ export const gitMergeTool: Tool<GitArgs> = {
 export const gitPullTool: Tool<GitArgs> = {
   name: "git-pull",
   description: "pull from remote",
+  tag: "git",
   safe: false,
   permissionLabel: "git pull",
   systemPromptEntry: (i) =>
@@ -363,6 +381,7 @@ export const gitPullTool: Tool<GitArgs> = {
 export const gitPushTool: Tool<GitArgs> = {
   name: "git-push",
   description: "push commits to remote",
+  tag: "git",
   safe: false,
   permissionLabel: "git push",
   systemPromptEntry: (i) =>
@@ -381,6 +400,7 @@ export const gitPushTool: Tool<GitArgs> = {
 export const gitStashTool: Tool<GitArgs> = {
   name: "git-stash",
   description: "stash or apply stashed changes",
+  tag: "git",
   safe: false,
   permissionLabel: "git stash",
   systemPromptEntry: (i) =>
@@ -401,6 +421,7 @@ export const gitStashTool: Tool<GitArgs> = {
 export const gitBranchCreateTool: Tool<GitArgs> = {
   name: "git-branch-create",
   description: "create a new branch without switching to it",
+  tag: "git",
   safe: false,
   permissionLabel: "git branch (create)",
   systemPromptEntry: (i) =>
@@ -421,6 +442,7 @@ export const gitBranchCreateTool: Tool<GitArgs> = {
 export const gitBranchDeleteTool: Tool<GitArgs> = {
   name: "git-branch-delete",
   description: "delete a branch",
+  tag: "git",
   safe: false,
   permissionLabel: "git branch -d",
   systemPromptEntry: (i) =>
@@ -444,6 +466,7 @@ export const gitBranchDeleteTool: Tool<GitArgs> = {
 export const gitCherryPickTool: Tool<GitArgs> = {
   name: "git-cherry-pick",
   description: "apply a specific commit from another branch",
+  tag: "git",
   safe: false,
   permissionLabel: "git cherry-pick",
   systemPromptEntry: (i) =>
@@ -466,6 +489,7 @@ export const gitCherryPickTool: Tool<GitArgs> = {
 export const gitTagCreateTool: Tool<GitArgs> = {
   name: "git-tag-create",
   description: "create a lightweight or annotated tag",
+  tag: "git",
   safe: false,
   permissionLabel: "git tag (create)",
   systemPromptEntry: (i) =>
@@ -486,6 +510,7 @@ export const gitRestoreTool: Tool<GitArgs> = {
   name: "git-restore",
   description:
     "discard working directory changes for a file (cannot be undone)",
+  tag: "git",
   safe: false,
   permissionLabel: "git restore",
   systemPromptEntry: (i) =>
@@ -505,6 +530,7 @@ export const gitRestoreTool: Tool<GitArgs> = {
 export const gitCleanTool: Tool<GitArgs> = {
   name: "git-clean",
   description: "remove untracked files (cannot be undone)",
+  tag: "git",
   safe: false,
   permissionLabel: "git clean",
   systemPromptEntry: (i) =>
