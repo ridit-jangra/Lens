@@ -3,7 +3,7 @@ import { Box, Text } from "ink";
 import figures from "figures";
 import path from "path";
 import { existsSync } from "fs";
-import { WatchRunner } from "../components/watch/WatchRunner";
+import { RunRunner } from "../components/watch/RunRunner";
 import { RED } from "../colors";
 
 interface Props {
@@ -15,7 +15,7 @@ interface Props {
   prompt?: string;
 }
 
-export function WatchCommand({
+export function RunCommand({
   cmd,
   path: inputPath,
   clean,
@@ -44,7 +44,7 @@ export function WatchCommand({
   }
 
   return (
-    <WatchRunner
+    <RunRunner
       cmd={cmd}
       repoPath={repoPath}
       clean={clean}
