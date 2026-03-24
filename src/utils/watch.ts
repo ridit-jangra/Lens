@@ -7,6 +7,8 @@ export type WatchProcess = {
   onLog: (cb: (line: string, isErr: boolean) => void) => void;
   onError: (cb: (chunk: ErrorChunk) => void) => void;
   onExit: (cb: (code: number | null) => void) => void;
+  onInputRequest: (cb: (prompt: string) => void) => void;
+  sendInput: (text: string) => void;
 };
 
 export type ErrorChunk = {
@@ -59,11 +61,21 @@ const ERROR_PATTERNS = [
 ];
 
 const NOISE_PATTERNS = [
-  /^\s*at\s+/, // stack trace lines
-  /^\s*\^+\s*$/, // caret indicators
-  /^\s*$/, // blank lines
-  /^\s*warn/i, // warnings (unless --verbose)
+  /^\s*at\s+/,
+  /^\s*\^+\s*$/,
+  /^\s*$/,
+  /^\s*warn/i,
   /deprecat/i,
+];
+
+const INPUT_REQUEST_PATTERNS = [
+  /:\s*$/,
+  /\?\s*$/,
+  />\s*$/,
+  /input/i,
+  /enter\s+\w/i,
+  /type\s+\w/i,
+  /press\s+\w/i,
 ];
 
 function isErrorLine(line: string): boolean {
@@ -74,24 +86,29 @@ function isNoise(line: string): boolean {
   return NOISE_PATTERNS.some((p) => p.test(line));
 }
 
+function isInputRequest(line: string): boolean {
+  const stripped = line.replace(/\x1b\[[0-9;]*m/g, "").trim();
+  if (!stripped) return false;
+  return INPUT_REQUEST_PATTERNS.some((p) => p.test(stripped));
+}
+
 function extractFilePath(lines: string[]): {
   filePath?: string;
   lineNumber?: number;
 } {
   for (const line of lines) {
-    // Python: File "path/to/file.py", line 12
     const pyM = line.match(/File "([^"]+\.py)",\s*line\s*(\d+)/);
     if (pyM) {
       return { filePath: pyM[1], lineNumber: parseInt(pyM[2]!, 10) };
     }
-    // JS/TS: ./src/foo.tsx:12:5
+
     const m = line.match(
       /([./][\w./\\-]+\.(tsx?|jsx?|mjs|cjs|ts|js|py)):(\d+)/,
     );
     if (m) {
       return { filePath: m[1], lineNumber: parseInt(m[3]!, 10) };
     }
-    // at Function (/abs/path/file.ts:12:5)
+
     const absM = line.match(/\(([^)]+\.(tsx?|jsx?|ts|js)):(\d+)/);
     if (absM) {
       return { filePath: absM[1], lineNumber: parseInt(absM[3]!, 10) };
@@ -107,11 +124,13 @@ export function spawnWatch(cmd: string, cwd: string): WatchProcess {
     cwd,
     shell: true,
     env: { ...process.env, FORCE_COLOR: "1" },
+    stdio: ["pipe", "pipe", "pipe"],
   });
 
   const logCallbacks: ((line: string, isErr: boolean) => void)[] = [];
   const errorCallbacks: ((chunk: ErrorChunk) => void)[] = [];
   const exitCallbacks: ((code: number | null) => void)[] = [];
+  const inputRequestCallbacks: ((prompt: string) => void)[] = [];
 
   const recentLines: string[] = [];
   let errorBuffer: string[] = [];
@@ -122,7 +141,7 @@ export function spawnWatch(cmd: string, cwd: string): WatchProcess {
     if (errorBuffer.length === 0) return;
 
     const raw = errorBuffer.join("\n");
-    const key = raw.slice(0, 120); // dedup key
+    const key = raw.slice(0, 120);
 
     if (seenErrors.has(key)) {
       errorBuffer = [];
@@ -146,7 +165,6 @@ export function spawnWatch(cmd: string, cwd: string): WatchProcess {
   };
 
   const processLine = (line: string, isErr: boolean) => {
-    // keep rolling context
     recentLines.push(line);
     if (recentLines.length > 30) recentLines.shift();
 
@@ -157,10 +175,11 @@ export function spawnWatch(cmd: string, cwd: string): WatchProcess {
       if (errorTimer) clearTimeout(errorTimer);
       errorTimer = setTimeout(flushError, 300);
     } else if (errorBuffer.length > 0) {
-      // accumulate lines after the initial error line (stack trace etc.)
       errorBuffer.push(line);
       if (errorTimer) clearTimeout(errorTimer);
       errorTimer = setTimeout(flushError, 300);
+    } else if (!isErr && isInputRequest(line)) {
+      inputRequestCallbacks.forEach((cb) => cb(line.trim()));
     }
   };
 
@@ -191,6 +210,10 @@ export function spawnWatch(cmd: string, cwd: string): WatchProcess {
     onLog: (cb) => logCallbacks.push(cb),
     onError: (cb) => errorCallbacks.push(cb),
     onExit: (cb) => exitCallbacks.push(cb),
+    onInputRequest: (cb) => inputRequestCallbacks.push(cb),
+    sendInput: (text) => {
+      child.stdin?.write(text + "\n");
+    },
   };
 }
 
@@ -211,7 +234,6 @@ export function readFileContext(
       const content = readFileSync(p, "utf-8");
       if (!lineNumber) return content.slice(0, 3000);
 
-      // return ±30 lines around the error line
       const lines = content.split("\n");
       const start = Math.max(0, lineNumber - 30);
       const end = Math.min(lines.length, lineNumber + 30);
