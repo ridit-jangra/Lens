@@ -19,8 +19,7 @@ await loadAddons();
 const program = new Command();
 
 program
-  .command("stalk <url>")
-  .alias("repo")
+  .command("repo <url>")
   .description("Analyze a remote repository")
   .action((url) => {
     render(<RepoCommand url={url} />);
@@ -34,16 +33,14 @@ program
   });
 
 program
-  .command("judge [path]")
-  .alias("review")
+  .command("review [path]")
   .description("Review a local codebase")
   .action((inputPath) => {
     render(<ReviewCommand path={inputPath ?? "."} />);
   });
 
 program
-  .command("cook <text>")
-  .alias("task")
+  .command("task <text>")
   .description("Apply a natural language change to the codebase")
   .option("-p, --path <path>", "Path to the repo", ".")
   .action((text: string, opts: { path: string }) => {
@@ -51,8 +48,7 @@ program
   });
 
 program
-  .command("vibe")
-  .alias("chat")
+  .command("chat")
   .description("Chat with your codebase — ask questions or make changes")
   .option("-p, --path <path>", "Path to the repo", ".")
   .action((opts: { path: string }) => {
@@ -61,7 +57,6 @@ program
 
 program
   .command("history")
-  .alias("timeline")
   .description(
     "Explore your code history — see commits, changes, and evolution",
   )
@@ -71,8 +66,7 @@ program
   });
 
 program
-  .command("crimes [files...]")
-  .alias("commit")
+  .command("commit [files...]")
   .description(
     "Generate a smart conventional commit message from staged changes or specific files",
   )
@@ -110,8 +104,9 @@ program
 
 program
   .command("run <cmd>")
-  .alias("spy")
-  .description("run a dev command and get AI suggestions for errors")
+  .description(
+    "Run your dev server. Lens detects and fixes errors automatically",
+  )
   .option("-p, --path <path>", "Path to the repo", ".")
   .option("--clean", "Only show AI suggestions, hide raw logs")
   .option("--fix-all", "Auto-apply fixes as errors are detected")
