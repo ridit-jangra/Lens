@@ -109,9 +109,9 @@ program
   );
 
 program
-  .command("watch <cmd>")
+  .command("run <cmd>")
   .alias("spy")
-  .description("Watch a dev command and get AI suggestions for errors")
+  .description("run a dev command and get AI suggestions for errors")
   .option("-p, --path <path>", "Path to the repo", ".")
   .option("--clean", "Only show AI suggestions, hide raw logs")
   .option("--fix-all", "Auto-apply fixes as errors are detected")
