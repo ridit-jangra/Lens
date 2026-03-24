@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import React from "react";
 import type { Provider } from "../../../types/config";
+import { classifyIntent } from "../../../utils/intentClassifier";
 import type { Message, ChatStage } from "../../../types/chat";
 import {
   saveChat,
@@ -421,8 +422,16 @@ export function useChat(repoPath: string) {
     const abort = new AbortController();
     abortControllerRef.current = abort;
 
+    const intent = classifyIntent(text);
+    const scopedToolsSection = registry.buildSystemPromptSection(intent);
+
+    const scopedSystemPrompt = currentSystemPrompt.replace(
+      /## TOOLS[\s\S]*?(?=\n## (?!TOOLS))/,
+      scopedToolsSection + "\n\n",
+    );
+
     setStage({ type: "thinking" });
-    callChat(currentProvider, currentSystemPrompt, nextAll, abort.signal)
+    callChat(currentProvider, scopedSystemPrompt, nextAll, abort.signal)
       .then((raw: string) => processResponse(raw, nextAll, abort.signal))
       .catch(handleError(nextAll));
   };

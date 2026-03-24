@@ -1,4 +1,5 @@
 import type { Tool, ToolContext } from "@ridit/lens-sdk";
+import { TOOL_TAGS } from "@ridit/lens-sdk";
 import {
   fetchUrl,
   searchWeb,
@@ -23,6 +24,7 @@ export const fetchTool: Tool<string> = {
   name: "fetch",
   description: "load a URL",
   safe: true,
+  tag: TOOL_TAGS.net,
   permissionLabel: "fetch",
   systemPromptEntry: (i) =>
     `### ${i}. fetch — load a URL\n<fetch>https://example.com</fetch>`,
@@ -45,6 +47,7 @@ export const shellTool: Tool<string> = {
   name: "shell",
   description: "run a terminal command",
   safe: false,
+  tag: TOOL_TAGS.shell,
   permissionLabel: "run",
   systemPromptEntry: (i) =>
     `### ${i}. shell — run a terminal command\n<shell>node -v</shell>`,
@@ -60,6 +63,7 @@ export const readFileTool: Tool<string> = {
   name: "read-file",
   description: "read a file from the repo",
   safe: true,
+  tag: TOOL_TAGS.read,
   permissionLabel: "read",
   systemPromptEntry: (i) =>
     `### ${i}. read-file — read a file from the repo\n<read-file>src/foo.ts</read-file>`,
@@ -74,6 +78,7 @@ export const readFileTool: Tool<string> = {
 export const readFolderTool: Tool<string> = {
   name: "read-folder",
   description: "list contents of a folder (files + subfolders, one level deep)",
+  tag: TOOL_TAGS.read,
   safe: true,
   permissionLabel: "folder",
   systemPromptEntry: (i) =>
@@ -94,6 +99,7 @@ interface GrepInput {
 export const grepTool: Tool<GrepInput> = {
   name: "grep",
   description: "search for a pattern across files in the repo",
+  tag: TOOL_TAGS.find,
   safe: true,
   permissionLabel: "grep",
   systemPromptEntry: (i) =>
@@ -124,6 +130,7 @@ interface WriteFileInput {
 export const writeFileTool: Tool<WriteFileInput> = {
   name: "write-file",
   description: "create or overwrite a file",
+  tag: TOOL_TAGS.write,
   safe: false,
   permissionLabel: "write",
   systemPromptEntry: (i) =>
@@ -147,6 +154,7 @@ export const writeFileTool: Tool<WriteFileInput> = {
 export const deleteFileTool: Tool<string> = {
   name: "delete-file",
   description: "permanently delete a single file",
+  tag: TOOL_TAGS.delete,
   safe: false,
   permissionLabel: "delete",
   systemPromptEntry: (i) =>
@@ -162,6 +170,7 @@ export const deleteFileTool: Tool<string> = {
 export const deleteFolderTool: Tool<string> = {
   name: "delete-folder",
   description: "permanently delete a folder and all its contents",
+  tag: TOOL_TAGS.delete,
   safe: false,
   permissionLabel: "delete folder",
   systemPromptEntry: (i) =>
@@ -177,6 +186,7 @@ export const deleteFolderTool: Tool<string> = {
 export const openUrlTool: Tool<string> = {
   name: "open-url",
   description: "open a URL in the user's default browser",
+  tag: TOOL_TAGS.net,
   safe: true,
   permissionLabel: "open",
   systemPromptEntry: (i) =>
@@ -194,6 +204,7 @@ interface GeneratePdfInput {
 export const generatePdfTool: Tool<GeneratePdfInput> = {
   name: "generate-pdf",
   description: "generate a PDF file from markdown-style content",
+  tag: TOOL_TAGS.write,
   safe: false,
   permissionLabel: "pdf",
   systemPromptEntry: (i) =>
@@ -222,6 +233,7 @@ export const generatePdfTool: Tool<GeneratePdfInput> = {
 
 export const searchTool: Tool<string> = {
   name: "search",
+  tag: TOOL_TAGS.net,
   description: "search the internet for anything you are unsure about",
   safe: true,
   permissionLabel: "search",
@@ -245,6 +257,7 @@ export const searchTool: Tool<string> = {
 export const cloneTool: Tool<string> = {
   name: "clone",
   description: "clone a GitHub repo so you can explore and discuss it",
+  tag: TOOL_TAGS.write,
   safe: false,
   permissionLabel: "clone",
   systemPromptEntry: (i) =>
@@ -265,6 +278,7 @@ export interface ChangesInput {
 export const changesTool: Tool<ChangesInput> = {
   name: "changes",
   description: "propose code edits (shown as a diff for user approval)",
+  tag: TOOL_TAGS.write,
   safe: false,
   permissionLabel: "changes",
   systemPromptEntry: (i) =>
@@ -290,6 +304,7 @@ interface ReadFilesInput {
 export const readFilesTool: Tool<ReadFilesInput> = {
   name: "read-files",
   description: "read multiple files from the repo at once",
+  tag: TOOL_TAGS.read,
   safe: true,
   permissionLabel: "read",
   systemPromptEntry: (i) =>
