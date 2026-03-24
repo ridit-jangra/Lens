@@ -19,14 +19,5 @@ export const ChatCommand = ({ path: inputPath }: { path: string }) => {
     );
   }
 
-  return (
-    <Box flexDirection="column">
-      <ChatRunner repoPath={resolvedPath} />
-      <Box marginTop={1} justifyContent="center">
-        <Text color="gray" dimColor>
-          Tip: Star Lens on GitHub ⭐
-        </Text>
-      </Box>
-    </Box>
-  );
+  return <ChatRunner repoPath={resolvedPath} />;
 };
