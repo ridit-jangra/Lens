@@ -174,11 +174,11 @@ function CodebaseQA({
     abortRef.current = abort;
 
     callChat(provider, systemPrompt, nextAll, abort.signal)
-      .then((answer) => {
+      .then((result) => {
         const assistantMsg: Message = {
           role: "assistant",
           type: "text",
-          content: answer,
+          content: result.text,
         };
         setCommitted((prev) => [...prev, assistantMsg]);
         setAllMessages([...nextAll, assistantMsg]);
