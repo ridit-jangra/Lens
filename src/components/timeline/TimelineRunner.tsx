@@ -777,9 +777,9 @@ ${summarizeTimeline(commits)}`;
 
   const runChat = async (history: Message[], signal: AbortSignal) => {
     try {
-      const raw = await callChat(provider, systemPrompt, history, signal);
+      const result = await callChat(provider, systemPrompt, history, signal);
       if (signal.aborted) return;
-      processResponse(raw, history, signal);
+      processResponse(result.text, history, signal);
     } catch (e: any) {
       if (e?.name === "AbortError") return;
       setMessages((prev) => [

@@ -602,12 +602,13 @@ ${lensFile.suggestions.length > 0 ? `\nProject suggestions:\n${lensFile.suggesti
 
       let raw: string;
       try {
-        raw = await callChat(
+        const result = await callChat(
           provider,
           systemPromptRef.current,
           messages,
           combinedSignal,
         );
+        raw = result.text;
       } finally {
         clearTimeout(timeoutId);
       }

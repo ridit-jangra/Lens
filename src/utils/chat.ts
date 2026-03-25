@@ -19,6 +19,11 @@ import { FEW_SHOT_MESSAGES } from "../prompts";
 import { registry } from "../utils/tools/registry";
 import type { FilePatch } from "../components/repo/DiffViewer";
 
+export type ChatResult = {
+  text: string;
+  truncated: boolean;
+};
+
 export type ParsedResponse =
   | { kind: "text"; content: string; remainder?: string }
   | {
@@ -219,7 +224,7 @@ export async function callChat(
   messages: Message[],
   abortSignal?: AbortSignal,
   retries = 2,
-): Promise<string> {
+): Promise<ChatResult> {
   const apiMessages = [
     ...buildFewShotMessages(),
     ...buildApiMessages(messages),
@@ -288,13 +293,20 @@ export async function callChat(
 
     if (provider.type === "anthropic") {
       const content = data.content as { type: string; text: string }[];
-      return content
+      const text = content
         .filter((b) => b.type === "text")
         .map((b) => b.text)
         .join("");
+      const truncated = (data as any).stop_reason === "max_tokens";
+      return { text, truncated };
     } else {
-      const choices = data.choices as { message: { content: string } }[];
-      return choices[0]?.message.content ?? "";
+      const choices = data.choices as {
+        message: { content: string };
+        finish_reason?: string;
+      }[];
+      const text = choices[0]?.message.content ?? "";
+      const truncated = choices[0]?.finish_reason === "length";
+      return { text, truncated };
     }
   } catch (err) {
     clearTimeout(timer);

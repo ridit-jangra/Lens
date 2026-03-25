@@ -4,7 +4,7 @@ import Spinner from "ink-spinner";
 import { useState } from "react";
 import path from "path";
 import os from "os";
-import TextInput from "ink-text-input";
+import { TextArea } from "./TextArea";
 import { ACCENT } from "../../colors";
 import { ProviderPicker } from "../provider/ProviderPicker";
 import { startCloneRepo } from "../../utils/repo";
@@ -136,7 +136,7 @@ function ForceAllWarning({
           esc
         </Text>
         <Text color="gray"> to cancel: </Text>
-        <TextInput
+        <TextArea
           value={input}
           onChange={setInput}
           onSubmit={(v) => onConfirm(v.trim().toLowerCase() === "yes")}

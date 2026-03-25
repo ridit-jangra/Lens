@@ -1,7 +1,7 @@
 import React from "react";
-import { Box, Static, Text } from "ink";
+import { Box, Static, Text, useStdout } from "ink";
 import Spinner from "ink-spinner";
-import TextInput from "ink-text-input";
+import { TextArea } from "./TextArea";
 import { ACCENT, GREEN, RED } from "../../colors";
 import { DiffViewer } from "../repo/DiffViewer";
 import { StaticMessage } from "./ChatMessage";
@@ -134,25 +134,24 @@ export function InputBox({
   onSubmit: (v: string) => void;
   inputKey?: number;
 }) {
+  const { stdout } = useStdout();
+  const cols = stdout?.columns ?? 80;
+  const rule = "─".repeat(Math.max(1, cols));
+
   return (
-    <Box
-      marginTop={1}
-      borderBottom
-      borderTop
-      borderRight={false}
-      borderLeft={false}
-      borderColor={"gray"}
-      borderStyle="single"
-    >
+    <Box flexDirection="column" marginTop={1}>
+      <Text color="gray" dimColor>{rule}</Text>
       <Box gap={1}>
         <Text color={ACCENT}>{">"}</Text>
-        <TextInput
+        <TextArea
           key={inputKey}
           value={value}
           onChange={onChange}
           onSubmit={onSubmit}
+          placeholder="ask anything..."
         />
       </Box>
+      <Text color="gray" dimColor>{rule}</Text>
     </Box>
   );
 }
@@ -196,7 +195,7 @@ export function ShortcutBar({
   return (
     <Box gap={3} marginTop={0}>
       <Text color="gray" dimColor>
-        enter send · ^v paste · ^c exit
+        enter send · alt+enter newline · ^w del word · ^c exit
       </Text>
       {forceApprove ? (
         <Text color={RED}>⚡⚡ force-all</Text>

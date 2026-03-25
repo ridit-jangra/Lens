@@ -28,6 +28,7 @@ import {
   buildSystemPrompt,
   parseResponse,
   callChat,
+  type ChatResult,
 } from "../../../utils/chat";
 
 export function useChat(repoPath: string) {
@@ -92,32 +93,26 @@ export function useChat(repoPath: string) {
     setStage({ type: "idle" });
   };
 
-  const TOOL_TAG_NAMES = [
-    "shell",
-    "fetch",
-    "read-file",
-    "read-folder",
-    "grep",
-    "write-file",
-    "delete-file",
-    "delete-folder",
-    "open-url",
-    "generate-pdf",
-    "search",
-    "clone",
-    "changes",
-  ];
+  const MAX_AUTO_CONTINUES = 3;
 
   function isLikelyTruncated(text: string): boolean {
-    return TOOL_TAG_NAMES.some(
-      (tag) => text.includes(`<${tag}>`) && !text.includes(`</${tag}>`),
-    );
+    // Check unclosed XML tool tags (dynamic — includes addon tools)
+    for (const tag of registry.names()) {
+      if (text.includes(`<${tag}>`) && !text.includes(`</${tag}>`))
+        return true;
+    }
+    // Check unclosed fenced code blocks (```tool\n... without closing ```)
+    const fences = text.match(/```/g);
+    if (fences && fences.length % 2 !== 0) return true;
+    return false;
   }
 
   const processResponse = (
     raw: string,
     currentAll: Message[],
     signal: AbortSignal,
+    truncated = false,
+    continueCount = 0,
   ) => {
     if (signal.aborted) {
       batchApprovedRef.current = false;
@@ -125,16 +120,40 @@ export function useChat(repoPath: string) {
       return;
     }
 
-    if (isLikelyTruncated(raw)) {
-      const nudgeMsg: Message = {
-        role: "user",
-        content: "Continue building the project. Write the next file.",
+    if (truncated || isLikelyTruncated(raw)) {
+      if (continueCount >= MAX_AUTO_CONTINUES) {
+        // Give up after max attempts — show whatever we have
+        batchApprovedRef.current = false;
+        const msg: Message = {
+          role: "assistant",
+          content:
+            raw.trim() ||
+            "(response was empty after multiple continuation attempts)",
+          type: "text",
+        };
+        setAllMessages([...currentAll, msg]);
+        setCommitted((prev) => [...prev, msg]);
+        setStage({ type: "idle" });
+        return;
+      }
+
+      // Include the partial response so the model knows where it left off
+      const partialMsg: Message = {
+        role: "assistant",
+        content: raw,
         type: "text",
       };
-      const withNudge = [...currentAll, nudgeMsg];
+      const nudgeMsg: Message = {
+        role: "user",
+        content:
+          "Your response was cut off. Please continue exactly from where you left off.",
+        type: "text",
+      };
+      const withContext = [...currentAll, partialMsg, nudgeMsg];
+
       const truncMsg: Message = {
         role: "assistant",
-        content: "(response cut off — auto-continuing...)",
+        content: `(response cut off — auto-continuing ${continueCount + 1}/${MAX_AUTO_CONTINUES}…)`,
         type: "text",
       };
       setAllMessages([...currentAll, truncMsg]);
@@ -154,14 +173,20 @@ export function useChat(repoPath: string) {
       callChat(
         currentProvider,
         currentSystemPrompt,
-        withNudge,
+        withContext,
         nextAbort.signal,
       )
-        .then((r: string) => {
+        .then((result: ChatResult) => {
           if (nextAbort.signal.aborted) return;
-          processResponse(r ?? "", withNudge, nextAbort.signal);
+          processResponse(
+            result.text ?? "",
+            withContext,
+            nextAbort.signal,
+            result.truncated,
+            continueCount + 1,
+          );
         })
-        .catch(handleError(withNudge));
+        .catch(handleError(withContext));
       return;
     }
 
@@ -370,7 +395,7 @@ export function useChat(repoPath: string) {
       setCommitted((prev) => [...prev, toolMsg]);
 
       if (approved && remainder && remainder.length > 0) {
-        processResponse(remainder, withTool, signal);
+        processResponse(remainder, withTool, signal, truncated, continueCount);
         return;
       }
 
@@ -383,17 +408,18 @@ export function useChat(repoPath: string) {
       const callWithAutoContinue = async (
         messages: Message[],
         maxRetries = 3,
-      ): Promise<string> => {
+      ): Promise<ChatResult> => {
         let currentMessages = messages;
         for (let i = 0; i < maxRetries; i++) {
-          if (nextAbort.signal.aborted) return "";
-          const r = await callChat(
+          if (nextAbort.signal.aborted)
+            return { text: "", truncated: false };
+          const result = await callChat(
             currentProvider,
             currentSystemPrompt,
             currentMessages,
             nextAbort.signal,
           );
-          if (r.trim()) return r;
+          if (result.text.trim()) return result;
           const nudgeMsg: Message = {
             role: "assistant",
             content: `(model stalled — auto-continuing, attempt ${i + 1}/${maxRetries})`,
@@ -405,23 +431,29 @@ export function useChat(repoPath: string) {
             ...currentMessages,
             {
               role: "user",
-              content: "Continue building the project. Write the next file.",
+              content:
+                "Please continue. Provide your response to the previous tool output.",
               type: "text",
             },
           ];
         }
-        return "";
+        return { text: "", truncated: false };
       };
 
       callWithAutoContinue(withTool)
-        .then((r: string) => {
+        .then((result: ChatResult) => {
           if (nextAbort.signal.aborted) return;
-          processResponse(r ?? "", withTool, nextAbort.signal);
+          processResponse(
+            result.text ?? "",
+            withTool,
+            nextAbort.signal,
+            result.truncated,
+          );
         })
         .catch(handleError(withTool));
     };
 
-    if (forceApprove || (autoApprove && isSafe) || batchApprovedRef.current) {
+    if (forceApprove || isSafe || batchApprovedRef.current) {
       executeAndContinue(true);
       return;
     }
@@ -487,7 +519,9 @@ export function useChat(repoPath: string) {
 
     setStage({ type: "thinking" });
     callChat(currentProvider, scopedSystemPrompt, nextAll, abort.signal)
-      .then((raw: string) => processResponse(raw, nextAll, abort.signal))
+      .then((result: ChatResult) =>
+        processResponse(result.text, nextAll, abort.signal, result.truncated),
+      )
       .catch(handleError(nextAll));
   };
 
