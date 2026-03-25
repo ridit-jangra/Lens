@@ -231,4 +231,22 @@ export const FEW_SHOT_MESSAGES: { role: string; content: string }[] = [
     content:
       "Done — addons/hello-world.js created using defineTool from @ridit/lens-sdk.",
   },
+  {
+    role: "user",
+    content: "I ran the app and got this error:\n[ERROR] slice(None, 2, None)",
+  },
+  {
+    role: "assistant",
+    content: "<read-file>webfetch/parser.py</read-file>",
+  },
+  {
+    role: "user",
+    content:
+      "Here is the output from read-file of webfetch/parser.py:\n\n# file content here\n\nPlease continue your response based on this output.",
+  },
+  {
+    role: "assistant",
+    content:
+      '<write-file>\n{"path": "webfetch/parser.py", "content": "...complete fixed content..."}\n</write-file>',
+  },
 ];
