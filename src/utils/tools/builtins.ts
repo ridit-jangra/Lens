@@ -139,21 +139,29 @@ export const writeFileTool: Tool<WriteFileInput> = {
     const tryParse = (s: string) => {
       try {
         const parsed = JSON.parse(s) as { path: string; content: string };
-        if (!parsed.path) return null;
+        if (!parsed.path || parsed.content === undefined) return null;
         return { ...parsed, path: parsed.path.replace(/\\/g, "/") };
       } catch {
         return null;
       }
     };
 
-    // first try raw
-    const first = tryParse(body);
+    const first = tryParse(body.trim());
     if (first) return first;
 
-    // extract path and content manually as fallback
+    try {
+      const sanitized = body
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "")
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "\\r")
+        .replace(/\t/g, "\\t");
+      const second = tryParse(sanitized);
+      if (second) return second;
+    } catch {}
+
     const pathMatch = body.match(/"path"\s*:\s*"([^"]+)"/);
     const contentMatch = body.match(/"content"\s*:\s*"([\s\S]*)"\s*}?\s*$/);
-    if (pathMatch && contentMatch) {
+    if (pathMatch && contentMatch && contentMatch[1] !== undefined) {
       return {
         path: pathMatch[1]!.replace(/\\/g, "/"),
         content: contentMatch[1]!.replace(/\\n/g, "\n").replace(/\\t/g, "\t"),

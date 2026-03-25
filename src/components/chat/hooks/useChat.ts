@@ -126,15 +126,42 @@ export function useChat(repoPath: string) {
     }
 
     if (isLikelyTruncated(raw)) {
+      const nudgeMsg: Message = {
+        role: "user",
+        content: "Continue building the project. Write the next file.",
+        type: "text",
+      };
+      const withNudge = [...currentAll, nudgeMsg];
       const truncMsg: Message = {
         role: "assistant",
-        content:
-          "(response cut off — the model hit its output limit mid-tool-call. Try asking it to continue, or simplify the request.)",
+        content: "(response cut off — auto-continuing...)",
         type: "text",
       };
       setAllMessages([...currentAll, truncMsg]);
       setCommitted((prev) => [...prev, truncMsg]);
-      setStage({ type: "idle" });
+
+      const currentProvider = providerRef.current;
+      const currentSystemPrompt = systemPromptRef.current;
+
+      if (!currentProvider) {
+        setStage({ type: "idle" });
+        return;
+      }
+
+      const nextAbort = new AbortController();
+      abortControllerRef.current = nextAbort;
+      setStage({ type: "thinking" });
+      callChat(
+        currentProvider,
+        currentSystemPrompt,
+        withNudge,
+        nextAbort.signal,
+      )
+        .then((r: string) => {
+          if (nextAbort.signal.aborted) return;
+          processResponse(r ?? "", withNudge, nextAbort.signal);
+        })
+        .catch(handleError(withNudge));
       return;
     }
 
@@ -353,24 +380,41 @@ export function useChat(repoPath: string) {
       abortControllerRef.current = nextAbort;
       setStage({ type: "thinking" });
 
-      callChat(currentProvider, currentSystemPrompt, withTool, nextAbort.signal)
+      const callWithAutoContinue = async (
+        messages: Message[],
+        maxRetries = 3,
+      ): Promise<string> => {
+        let currentMessages = messages;
+        for (let i = 0; i < maxRetries; i++) {
+          if (nextAbort.signal.aborted) return "";
+          const r = await callChat(
+            currentProvider,
+            currentSystemPrompt,
+            currentMessages,
+            nextAbort.signal,
+          );
+          if (r.trim()) return r;
+          const nudgeMsg: Message = {
+            role: "assistant",
+            content: `(model stalled — auto-continuing, attempt ${i + 1}/${maxRetries})`,
+            type: "text",
+          };
+          setCommitted((prev) => [...prev, nudgeMsg]);
+          setAllMessages((prev) => [...prev, nudgeMsg]);
+          currentMessages = [
+            ...currentMessages,
+            {
+              role: "user",
+              content: "Continue building the project. Write the next file.",
+              type: "text",
+            },
+          ];
+        }
+        return "";
+      };
+
+      callWithAutoContinue(withTool)
         .then((r: string) => {
-          if (nextAbort.signal.aborted) return;
-          if (!r.trim()) {
-            const nudged: Message[] = [
-              ...withTool,
-              { role: "user", content: "Please continue.", type: "text" },
-            ];
-            return callChat(
-              currentProvider,
-              currentSystemPrompt,
-              nudged,
-              nextAbort.signal,
-            );
-          }
-          return r;
-        })
-        .then((r: string | undefined) => {
           if (nextAbort.signal.aborted) return;
           processResponse(r ?? "", withTool, nextAbort.signal);
         })
