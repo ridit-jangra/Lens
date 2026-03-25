@@ -136,13 +136,31 @@ export const writeFileTool: Tool<WriteFileInput> = {
   systemPromptEntry: (i) =>
     `### ${i}. write-file — create or overwrite a file\n<write-file>\n{"path": "data/output.csv", "content": "col1,col2\\nval1,val2"}\n</write-file>`,
   parseInput: (body) => {
-    try {
-      const parsed = JSON.parse(body) as { path: string; content: string };
-      if (!parsed.path) return null;
-      return { ...parsed, path: parsed.path.replace(/\\/g, "/") };
-    } catch {
-      return null;
+    const tryParse = (s: string) => {
+      try {
+        const parsed = JSON.parse(s) as { path: string; content: string };
+        if (!parsed.path) return null;
+        return { ...parsed, path: parsed.path.replace(/\\/g, "/") };
+      } catch {
+        return null;
+      }
+    };
+
+    // first try raw
+    const first = tryParse(body);
+    if (first) return first;
+
+    // extract path and content manually as fallback
+    const pathMatch = body.match(/"path"\s*:\s*"([^"]+)"/);
+    const contentMatch = body.match(/"content"\s*:\s*"([\s\S]*)"\s*}?\s*$/);
+    if (pathMatch && contentMatch) {
+      return {
+        path: pathMatch[1]!.replace(/\\/g, "/"),
+        content: contentMatch[1]!.replace(/\\n/g, "\n").replace(/\\t/g, "\t"),
+      };
     }
+
+    return null;
   },
   summariseInput: ({ path, content }) => `${path} (${content.length} bytes)`,
   execute: ({ path: filePath, content }, ctx) => ({

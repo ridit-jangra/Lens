@@ -13,6 +13,8 @@ import {
   buildMemorySummary,
   addMemory,
   deleteMemory,
+  getSessionToolSummary,
+  logToolCall,
 } from "../../../utils/memory";
 import { fetchFileTree, readImportantFiles } from "../../../utils/files";
 import { readLensFile } from "../../../utils/lensfile";
@@ -313,13 +315,14 @@ export function useChat(repoPath: string) {
       }
 
       if (approved && !result.startsWith("Error:")) {
-        appendMemory({
-          kind: "shell-run",
-          detail: tool.summariseInput
+        logToolCall(
+          parsed.toolName,
+          tool.summariseInput
             ? String(tool.summariseInput(parsed.input))
             : parsed.rawInput,
-          summary: result.split("\n")[0]?.slice(0, 120) ?? "",
-        });
+          result,
+          repoPath,
+        );
       }
 
       const displayContent = tool.summariseInput
@@ -424,11 +427,19 @@ export function useChat(repoPath: string) {
 
     const intent = classifyIntent(text);
     const scopedToolsSection = registry.buildSystemPromptSection(intent);
+    const sessionSummary = getSessionToolSummary(repoPath);
 
-    const scopedSystemPrompt = currentSystemPrompt.replace(
+    let scopedSystemPrompt = currentSystemPrompt.replace(
       /## TOOLS[\s\S]*?(?=\n## (?!TOOLS))/,
       scopedToolsSection + "\n\n",
     );
+
+    if (sessionSummary) {
+      scopedSystemPrompt = scopedSystemPrompt.replace(
+        /## CODEBASE/,
+        sessionSummary + "\n\n## CODEBASE",
+      );
+    }
 
     setStage({ type: "thinking" });
     callChat(currentProvider, scopedSystemPrompt, nextAll, abort.signal)
@@ -477,22 +488,24 @@ export function useChat(repoPath: string) {
   const applyPatchesAndContinue = (patches: any[]) => {
     try {
       applyPatches(repoPath, patches);
-      appendMemory({
-        kind: "code-applied",
-        detail: patches.map((p) => p.path).join(", "),
-        summary: `Applied changes to ${patches.length} file(s)`,
-      });
+      logToolCall(
+        "changes",
+        patches.map((p) => p.path).join(", "),
+        `Applied changes to ${patches.length} file(s)`,
+        repoPath,
+      );
     } catch {
       /* non-fatal */
     }
   };
 
   const skipPatches = (patches: any[]) => {
-    appendMemory({
-      kind: "code-skipped",
-      detail: patches.map((p: { path: string }) => p.path).join(", "),
-      summary: `Skipped changes to ${patches.length} file(s)`,
-    });
+    logToolCall(
+      "changes-skipped",
+      patches.map((p: { path: string }) => p.path).join(", "),
+      `Skipped changes to ${patches.length} file(s)`,
+      repoPath,
+    );
   };
 
   return {
