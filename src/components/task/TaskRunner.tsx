@@ -88,7 +88,7 @@ function ThinkingAboutStep({ prompt }: { prompt: string }) {
   return (
     <Box gap={1}>
       <Text color={ACCENT}>
-        <Spinner />
+        <Spinner type="triangle" />
       </Text>
       <Text color={ACCENT}>{phrase}</Text>
       <Text color="gray">"{prompt}"</Text>
@@ -270,7 +270,7 @@ export const PromptRunner = ({
     return (
       <Box marginTop={1} gap={1}>
         <Text color={ACCENT}>
-          <Spinner />
+          <Spinner type="dots2" />
         </Text>
         <Text>Reading codebase...</Text>
       </Box>
@@ -322,7 +322,7 @@ export const PromptRunner = ({
     return (
       <Box marginTop={1} gap={1}>
         <Text color={ACCENT}>
-          <Spinner />
+          <Spinner type="bouncingBar" />
         </Text>
         <Text>Applying changes...</Text>
       </Box>

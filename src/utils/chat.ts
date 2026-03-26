@@ -195,12 +195,22 @@ export function toCloneUrl(url: string): string {
   return clean.endsWith(".git") ? clean : `${clean}.git`;
 }
 
+// Replace buildApiMessages in src/utils/chat.ts
+
 function buildApiMessages(
   messages: Message[],
 ): { role: string; content: string }[] {
   const recent = messages.slice(-MAX_HISTORY);
 
-  return recent.map((m) => {
+  const writtenFiles: string[] = [];
+  for (const m of recent) {
+    if (m.type === "tool" && m.toolName === "write-file" && m.approved) {
+      const pathMatch = m.content.match(/^(.+?)\s*\(/);
+      if (pathMatch?.[1]) writtenFiles.push(pathMatch[1]);
+    }
+  }
+
+  return recent.map((m, idx) => {
     if (m.type === "tool") {
       if (!m.approved) {
         return {
@@ -209,11 +219,39 @@ function buildApiMessages(
             "The tool call was denied by the user. Please respond without using that tool.",
         };
       }
+
+      if (m.toolName === "write-file") {
+        const remaining = writtenFiles.slice(
+          writtenFiles.indexOf(m.content.split(" (")[0]!) + 1,
+        );
+        const doneList = writtenFiles
+          .slice(0, writtenFiles.indexOf(m.content.split(" (")[0]!) + 1)
+          .map((f) => `- ${f}`)
+          .join("\n");
+
+        return {
+          role: "user",
+          content: [
+            `Tool result for write-file (${m.content}):`,
+            "",
+            m.result,
+            "",
+            `Files written so far:`,
+            doneList || `- ${m.content.split(" (")[0]}`,
+            "",
+            remaining.length > 0
+              ? `Continue with the NEXT file. Do NOT rewrite any file already written above.`
+              : `All files written. Summarize what was created.`,
+          ].join("\n"),
+        };
+      }
+
       return {
         role: "user",
-        content: `Here is the output from the ${m.toolName} of ${m.content}:\n\n${m.result}\n\nPlease continue your response based on this output.`,
+        content: `Tool result for ${m.toolName} (${m.content}):\n\n${m.result}\n\nPlease continue your response based on this output.`,
       };
     }
+
     return { role: m.role, content: m.content };
   });
 }
@@ -262,7 +300,7 @@ export async function callChat(
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60_000);
+  const timer = setTimeout(() => controller.abort(), 180_000);
   abortSignal?.addEventListener("abort", () => controller.abort());
 
   try {
@@ -310,7 +348,22 @@ export async function callChat(
     }
   } catch (err) {
     clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") throw err;
+    if (err instanceof Error && err.name === "AbortError") {
+      if (abortSignal?.aborted) throw err;
+      if (retries > 0) {
+        await new Promise((r) => setTimeout(r, 1500));
+        return callChat(
+          provider,
+          systemPrompt,
+          messages,
+          abortSignal,
+          retries - 1,
+        );
+      }
+      throw new Error(
+        "Request timed out. The model took too long to respond (>3 min).",
+      );
+    }
     if (retries > 0) {
       await new Promise((r) => setTimeout(r, 1500));
       return callChat(

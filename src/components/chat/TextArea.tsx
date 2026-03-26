@@ -59,12 +59,17 @@ export function TextArea({
       if (key.tab || (key.shift && key.tab)) return;
       if (key.ctrl && input === "c") return;
 
-      if (key.return && !key.meta) {
+      const isShiftEnter =
+        (key.return && key.shift) ||
+        input === "\x1b[27;2;13~" ||
+        input === "\x1b[13;2u";
+
+      if (key.return && !key.meta && !key.shift && !isShiftEnter) {
         onSubmit(value);
         return;
       }
 
-      if ((key.return && key.meta) || (key.ctrl && input === "j")) {
+      if (isShiftEnter) {
         const next = value.slice(0, cursor) + "\n" + value.slice(cursor);
         onChange(next);
         setCursor((c) => c + 1);
@@ -118,16 +123,12 @@ export function TextArea({
         return;
       }
 
-      if (key.ctrl && input === "w") {
+      if (key.ctrl && input === "f") return;
+
+      if ((key.ctrl && key.delete) || input === "\x1b[3;5~") {
         const to = wordBoundaryLeft(value, cursor);
         onChange(value.slice(0, to) + value.slice(cursor));
         setCursor(to);
-        return;
-      }
-
-      if (key.ctrl && key.delete) {
-        const to = wordBoundaryRight(value, cursor);
-        onChange(value.slice(0, cursor) + value.slice(to));
         return;
       }
 

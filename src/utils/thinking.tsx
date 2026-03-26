@@ -1,5 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 
+const TIPS = [
+  "use /auto to toggle auto-approve for safe tools",
+  "ctrl+f to toggle force-all mode",
+  "shift+enter for a new line in the input",
+  "↑ / ↓ arrows navigate message history",
+  "ctrl+w deletes the previous word",
+  "ctrl+delete deletes the next word",
+  "/timeline to browse commit history",
+  "/review to analyze the current codebase",
+  "/memory list to view stored memories",
+  "/chat list to see saved conversations",
+  "esc cancels a running response",
+  "/clear history resets session memory",
+  "tab autocompletes slash commands",
+  "lens commit --auto for fast AI commits",
+  "lens run \"bun dev\" to watch and auto-fix errors",
+];
+
 const PHRASES: Record<string, string[]> = {
   general: [
     "marinating on that... 🍖",
@@ -320,6 +338,52 @@ const PHRASES: Record<string, string[]> = {
 };
 
 export type ThinkingKind = keyof typeof PHRASES;
+
+export function useThinkingTip(active: boolean, intervalMs = 8000): string {
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
+  const usedRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!active) return;
+    const pickUnused = () => {
+      if (usedRef.current.size >= TIPS.length) usedRef.current.clear();
+      let next: number;
+      do {
+        next = Math.floor(Math.random() * TIPS.length);
+      } while (usedRef.current.has(next));
+      usedRef.current.add(next);
+      return next;
+    };
+    setIndex(pickUnused());
+    const id = setInterval(() => setIndex(pickUnused()), intervalMs);
+    return () => clearInterval(id);
+  }, [active, intervalMs]);
+
+  return TIPS[index]!;
+}
+
+export function useThinkingTimer(active: boolean): string {
+  const [seconds, setSeconds] = useState(0);
+  const startRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (active) {
+      startRef.current = Date.now();
+      setSeconds(0);
+      const id = setInterval(() => {
+        setSeconds(Math.floor((Date.now() - (startRef.current ?? Date.now())) / 1000));
+      }, 1000);
+      return () => clearInterval(id);
+    } else {
+      startRef.current = null;
+      setSeconds(0);
+    }
+  }, [active]);
+
+  if (!active || seconds === 0) return "";
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
 
 export function useThinkingPhrase(
   active: boolean,

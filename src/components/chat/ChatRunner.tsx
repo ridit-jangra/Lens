@@ -8,7 +8,7 @@ import { TextArea } from "./TextArea";
 import { ACCENT } from "../../colors";
 import { ProviderPicker } from "../provider/ProviderPicker";
 import { startCloneRepo } from "../../utils/repo";
-import { useThinkingPhrase } from "../../utils/thinking";
+import { useThinkingPhrase, useThinkingTip, useThinkingTimer } from "../../utils/thinking";
 import { walkDir, applyPatches, toCloneUrl } from "../../utils/chat";
 import { appendMemory } from "../../utils/memory";
 import { getChatNameSuggestions, saveChat } from "../../utils/chatHistory";
@@ -147,9 +147,18 @@ function ForceAllWarning({
   );
 }
 
-export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
-  const chat = useChat(repoPath);
-  const thinkingPhrase = useThinkingPhrase(chat.stage.type === "thinking");
+export const ChatRunner = ({
+  repoPath,
+  autoForce = false,
+}: {
+  repoPath: string;
+  autoForce?: boolean;
+}) => {
+  const chat = useChat(repoPath, autoForce);
+  const isThinking = chat.stage.type === "thinking";
+  const thinkingPhrase = useThinkingPhrase(isThinking);
+  const thinkingTip = useThinkingTip(isThinking);
+  const thinkingTimer = useThinkingTimer(isThinking);
 
   const handleStageKey = (input: string, key: any) => {
     const { stage } = chat;
@@ -321,10 +330,14 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
           if (msg?.type === "plan") {
             chat.applyPatchesAndContinue(msg.patches);
             const applied: Message = { ...msg, applied: true };
-            chat.setAllMessages((prev) =>
-              prev.map((m, i) => (i === chat.pendingMsgIndex ? applied : m)),
+            const updatedAll = chat.allMessages.map((m, i) =>
+              i === chat.pendingMsgIndex ? applied : m,
             );
+            chat.setAllMessages(updatedAll);
             chat.setCommitted((prev) => [...prev, applied]);
+            chat.setPendingMsgIndex(null);
+            chat.continueAfterChanges(updatedAll, msg.content || "code changes");
+            return;
           }
         }
         chat.setPendingMsgIndex(null);
@@ -351,6 +364,26 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       }
     }
   };
+
+  useInput(
+    (input, key) => {
+      if (!(key.ctrl && input === "f")) return;
+      if (chat.forceApprove) {
+        chat.setForceApprove(false);
+        chat.setAutoApprove(false);
+        const msg: Message = {
+          role: "assistant",
+          content: "Force-all mode OFF — tools will ask for permission again.",
+          type: "text",
+        };
+        chat.setCommitted((prev) => [...prev, msg]);
+        chat.setAllMessages((prev: Message[]) => [...prev, msg]);
+      } else {
+        chat.setShowForceWarning(true);
+      }
+    },
+    { isActive: chat.stage.type === "idle" },
+  );
 
   const chatInput = useChatInput(
     chat.stage,
@@ -408,7 +441,7 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       <Box gap={1} marginTop={1}>
         <Text color={ACCENT}>*</Text>
         <Text color={ACCENT}>
-          <Spinner />
+          <Spinner type="arc" />
         </Text>
         <Text color="gray" dimColor>
           indexing codebase…
@@ -476,12 +509,19 @@ export const ChatRunner = ({ repoPath }: { repoPath: string }) => {
       )}
 
       {!chat.showForceWarning && stage.type === "thinking" && (
-        <Box gap={1}>
-          <Text color={ACCENT}>●</Text>
-          <TypewriterText text={thinkingPhrase} />
-          <Text color="gray" dimColor>
-            · esc cancel
-          </Text>
+        <Box flexDirection="column">
+          <Box gap={1}>
+            <Text color={ACCENT}>●</Text>
+            <TypewriterText text={thinkingPhrase} />
+            <Text color="gray" dimColor>
+              {thinkingTimer ? `· ${thinkingTimer} ` : ""}· esc cancel
+            </Text>
+          </Box>
+          <Box marginLeft={2}>
+            <Text color="gray" dimColor>
+              tip: {thinkingTip}
+            </Text>
+          </Box>
         </Box>
       )}
 

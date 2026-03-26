@@ -1,7 +1,9 @@
 import React from "react";
 import { Box, Text } from "ink";
+import figures from "figures";
 import { ACCENT, GREEN, RED } from "../../colors";
 import type { Message } from "../../types/chat";
+import type { DiffLine } from "../repo/DiffViewer";
 
 function InlineText({ text }: { text: string }) {
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
@@ -170,10 +172,12 @@ export function StaticMessage({ msg }: { msg: Message }) {
   if (msg.type === "plan") {
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Box gap={1}>
-          <Text color={ACCENT}>*</Text>
-          <MessageBody content={msg.content} />
-        </Box>
+        {msg.content ? (
+          <Box gap={1}>
+            <Text color={ACCENT}>*</Text>
+            <MessageBody content={msg.content} />
+          </Box>
+        ) : null}
         <Box marginLeft={2} gap={1}>
           <Text color={msg.applied ? GREEN : "gray"}>
             {msg.applied ? "✓" : "·"}
@@ -182,6 +186,44 @@ export function StaticMessage({ msg }: { msg: Message }) {
             {msg.applied ? "changes applied" : "changes skipped"}
           </Text>
         </Box>
+        {msg.applied && msg.diffLines && msg.diffLines.length > 0 && (
+          <Box flexDirection="column" marginLeft={2} marginTop={0}>
+            {msg.patches.map((patch, fi) => (
+              <Box key={patch.path} flexDirection="column">
+                <Text bold color={fi % 2 === 0 ? "cyan" : "magenta"}>
+                  {figures.bullet} {patch.path}
+                  {patch.isNew ? " (new)" : ""}
+                </Text>
+                {(msg.diffLines![fi] ?? []).map((line: DiffLine, li: number) => {
+                  const prefix =
+                    line.type === "added"
+                      ? "+"
+                      : line.type === "removed"
+                        ? "-"
+                        : " ";
+                  const color =
+                    line.type === "added"
+                      ? "green"
+                      : line.type === "removed"
+                        ? "red"
+                        : "gray";
+                  const lineNumStr =
+                    line.lineNum === -1
+                      ? "   "
+                      : String(line.lineNum).padStart(3, " ");
+                  return (
+                    <Box key={li}>
+                      <Text color="gray">{lineNumStr} </Text>
+                      <Text color={color}>
+                        {prefix} {line.content}
+                      </Text>
+                    </Box>
+                  );
+                })}
+              </Box>
+            ))}
+          </Box>
+        )}
       </Box>
     );
   }

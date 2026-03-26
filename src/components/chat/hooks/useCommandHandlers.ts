@@ -66,10 +66,6 @@ function makeMsg(content: string): Message {
   return { role: "assistant", content, type: "text" };
 }
 
-/**
- * Returns true if the command was handled, false if it should fall through
- * to the normal message flow.
- */
 export function handleCommand(text: string, ctx: CommandContext): boolean {
   const t = text.trim().toLowerCase();
 

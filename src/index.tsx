@@ -16,6 +16,11 @@ import { loadAddons } from "./utils/addons/loadAddons";
 registerBuiltins();
 await loadAddons();
 
+if (process.stdout.isTTY) {
+  process.stdout.write("\x1b[>4;1m");
+  process.on("exit", () => process.stdout.write("\x1b[>4;0m"));
+}
+
 const program = new Command();
 
 program
@@ -51,8 +56,14 @@ program
   .command("chat")
   .description("Chat with your codebase — ask questions or make changes")
   .option("-p, --path <path>", "Path to the repo", ".")
-  .action((opts: { path: string }) => {
-    render(<ChatCommand path={opts.path} />);
+  .option(
+    "--auto-force",
+    "Start with force-all mode enabled (auto-approves all tools)",
+  )
+  .action((opts: { path: string; autoForce: boolean }) => {
+    render(
+      <ChatCommand path={opts.path} autoForce={opts.autoForce ?? false} />,
+    );
   });
 
 program
