@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Box, Static, Text, useStdout } from "ink";
 import Spinner from "ink-spinner";
 import { TextArea } from "./TextArea";
@@ -24,11 +24,6 @@ function Hint({ text }: { text: string }) {
   );
 }
 
-// ── PermissionPrompt ──────────────────────────────────────────────────────────
-//
-// Works with both the old explicit ToolCall union and the new generic
-// { type, _label, _display } shape produced by the plugin system.
-
 export function PermissionPrompt({
   tool,
   onDecide,
@@ -40,7 +35,6 @@ export function PermissionPrompt({
   let label: string;
   let value: string;
 
-  // Generic plugin tool shape
   if ("_label" in tool) {
     const iconMap: Record<string, string> = {
       run: "$",
@@ -61,7 +55,6 @@ export function PermissionPrompt({
     label = tool._label;
     value = tool._display;
   } else {
-    // Legacy explicit ToolCall union
     if (tool.type === "shell") {
       icon = "$";
       label = "run";
@@ -135,12 +128,23 @@ export function InputBox({
   inputKey?: number;
 }) {
   const { stdout } = useStdout();
-  const cols = stdout?.columns ?? 80;
+  const [cols, setCols] = useState(stdout?.columns ?? 80);
+
+  useEffect(() => {
+    const handler = () => setCols(stdout?.columns ?? 80);
+    stdout?.on("resize", handler);
+    return () => {
+      stdout?.off("resize", handler);
+    };
+  }, [stdout]);
+
   const rule = "─".repeat(Math.max(1, cols));
 
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Text color="gray" dimColor>{rule}</Text>
+      <Text color="gray" dimColor>
+        {rule}
+      </Text>
       <Box gap={1}>
         <Text color={ACCENT}>{">"}</Text>
         <TextArea
@@ -151,7 +155,9 @@ export function InputBox({
           placeholder="ask anything..."
         />
       </Box>
-      <Text color="gray" dimColor>{rule}</Text>
+      <Text color="gray" dimColor>
+        {rule}
+      </Text>
     </Box>
   );
 }
@@ -195,7 +201,7 @@ export function ShortcutBar({
   return (
     <Box gap={3} marginTop={0}>
       <Text color="gray" dimColor>
-        enter send · alt+enter newline · ^w del word · ^c exit
+        enter send · ctrl+enter newline · ctrl+del del word · ^f force · ^c exit
       </Text>
       {forceApprove ? (
         <Text color={RED}>⚡⚡ force-all</Text>
@@ -243,7 +249,7 @@ export function CloningView({
       <History committed={committed} />
       <Box gap={1} marginTop={1}>
         <Text color={ACCENT}>
-          <Spinner />
+          <Spinner type="line" />
         </Text>
         <Text color="gray">cloning </Text>
         <Text color={ACCENT}>{stage.repoUrl}</Text>

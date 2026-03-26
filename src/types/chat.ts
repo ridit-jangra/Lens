@@ -33,7 +33,8 @@ export type Message =
         | "delete-folder"
         | "open-url"
         | "generate-pdf"
-        | "search";
+        | "search"
+        | "changes";
       content: string;
       result: string;
       approved: boolean;
@@ -43,6 +44,7 @@ export type Message =
       type: "plan";
       content: string;
       patches: FilePatch[];
+      diffLines?: DiffLine[][];
       applied: boolean;
     };
 

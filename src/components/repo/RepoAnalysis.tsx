@@ -105,7 +105,7 @@ function AskingFilesStep() {
   return (
     <Box gap={1}>
       <Text color={ACCENT}>
-        <Spinner />
+        <Spinner type="moon" />
       </Text>
       <Text color={ACCENT}>{phrase}</Text>
     </Box>
@@ -117,7 +117,7 @@ function AnalyzingStep() {
   return (
     <Box gap={1}>
       <Text color={ACCENT}>
-        <Spinner />
+        <Spinner type="earth" />
       </Text>
       <Text color={ACCENT}>{phrase}</Text>
     </Box>
@@ -366,7 +366,7 @@ export const RepoAnalysis = ({
     return (
       <Box marginTop={1}>
         <Text color={ACCENT}>
-          <Spinner />
+          <Spinner type="arc" />
         </Text>
         <Box marginLeft={1}>
           <Text>Writing file...</Text>

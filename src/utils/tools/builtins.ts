@@ -136,41 +136,56 @@ export const writeFileTool: Tool<WriteFileInput> = {
   systemPromptEntry: (i) =>
     `### ${i}. write-file — create or overwrite a file\n<write-file>\n{"path": "data/output.csv", "content": "col1,col2\\nval1,val2"}\n</write-file>`,
   parseInput: (body) => {
-    const tryParse = (s: string) => {
+    const tryParse = (s: string): WriteFileInput | null => {
       try {
-        const parsed = JSON.parse(s) as { path: string; content: string };
-        if (!parsed.path || parsed.content === undefined) return null;
-        return { ...parsed, path: parsed.path.replace(/\\/g, "/") };
+        const parsed = JSON.parse(s) as { path?: unknown; content?: unknown };
+        if (
+          typeof parsed.path !== "string" ||
+          typeof parsed.content !== "string"
+        )
+          return null;
+        return {
+          path: parsed.path.replace(/\\/g, "/"),
+          content: parsed.content,
+        };
       } catch {
         return null;
       }
     };
 
+    // attempt 1: parse as-is
     const first = tryParse(body.trim());
     if (first) return first;
 
+    // attempt 2: escape unescaped control characters
     try {
       const sanitized = body
         .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "")
-        .replace(/\n/g, "\\n")
-        .replace(/\r/g, "\\r")
-        .replace(/\t/g, "\\t");
+        .replace(/(?<!\\)\n/g, "\\n")
+        .replace(/(?<!\\)\r/g, "\\r")
+        .replace(/(?<!\\)\t/g, "\\t");
       const second = tryParse(sanitized);
       if (second) return second;
     } catch {}
 
+    // attempt 3: regex extraction as last resort
     const pathMatch = body.match(/"path"\s*:\s*"([^"]+)"/);
-    const contentMatch = body.match(/"content"\s*:\s*"([\s\S]*)"\s*}?\s*$/);
-    if (pathMatch && contentMatch && contentMatch[1] !== undefined) {
+    const contentMatch = body.match(/"content"\s*:\s*"([\s\S]*?)"\s*}?\s*$/);
+    if (pathMatch?.[1] && contentMatch?.[1] !== undefined) {
       return {
-        path: pathMatch[1]!.replace(/\\/g, "/"),
-        content: contentMatch[1]!.replace(/\\n/g, "\n").replace(/\\t/g, "\t"),
+        path: pathMatch[1].replace(/\\/g, "/"),
+        content: contentMatch[1]
+          .replace(/\\n/g, "\n")
+          .replace(/\\r/g, "\r")
+          .replace(/\\t/g, "\t"),
       };
     }
 
     return null;
   },
-  summariseInput: ({ path, content }) => `${path} (${content.length} bytes)`,
+  // null-safe — parseInput can return null if AI sends malformed JSON
+  summariseInput: (input) =>
+    input ? `${input.path} (${input.content.length} bytes)` : "unknown file",
   execute: ({ path: filePath, content }, ctx) => ({
     kind: "text",
     value: writeFile(filePath, content, ctx.repoPath),

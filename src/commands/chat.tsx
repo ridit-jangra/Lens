@@ -1,23 +1,17 @@
 import React from "react";
-import { Box, Text } from "ink";
-import figures from "figures";
-import { existsSync } from "fs";
-import path from "path";
+import { Box } from "ink";
 import { ChatRunner } from "../components/chat/ChatRunner";
-import { ACCENT } from "../colors";
 
-export const ChatCommand = ({ path: inputPath }: { path: string }) => {
-  const resolvedPath = path.resolve(inputPath);
-
-  if (!existsSync(resolvedPath)) {
-    return (
-      <Box marginTop={1}>
-        <Text color="red">
-          {figures.cross} Path not found: {resolvedPath}
-        </Text>
-      </Box>
-    );
-  }
-
-  return <ChatRunner repoPath={resolvedPath} />;
-};
+export function ChatCommand({
+  path,
+  autoForce = false,
+}: {
+  path: string;
+  autoForce?: boolean;
+}) {
+  return (
+    <Box flexDirection="column">
+      <ChatRunner repoPath={path} autoForce={autoForce} />
+    </Box>
+  );
+}
