@@ -31,7 +31,7 @@ export function InputBox({
   const rule = "─".repeat(Math.max(1, cols - 4));
 
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <Box flexDirection="column">
       <Text color="gray" dimColor>
         {rule}
       </Text>

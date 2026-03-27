@@ -11,7 +11,6 @@ import {
   saveSession,
 } from "@ridit/lens-core";
 import { Message } from "./Message";
-import { Statusbar } from "./Statusbar";
 import { ToolCall } from "./ToolCall";
 
 const cwd = process.cwd();
@@ -87,15 +86,7 @@ export function ChatView() {
   };
 
   return (
-    <Box flexDirection="column" marginX={2} marginTop={1}>
-      <Statusbar
-        model={MODEL}
-        isLoading={isLoading}
-        sessionId={session.id}
-        cwd={cwd}
-      />
-
-      {/* Static messages */}
+    <Box flexDirection="column" marginTop={1}>
       <Static items={session.messages}>
         {(message, i) => (
           <Message key={i} role={message.role}>
@@ -104,7 +95,6 @@ export function ChatView() {
         )}
       </Static>
 
-      {/* Dynamic: tool calls + streaming chunk */}
       <Box flexDirection="column">
         {toolCalls.map((tc) => (
           <ToolCall
@@ -115,14 +105,13 @@ export function ChatView() {
           />
         ))}
         {isLoading && currentChunk && (
-          <Box gap={1} marginLeft={2}>
+          <Box gap={1}>
             <Text color="cyan">●</Text>
             <Text color="gray">{currentChunk}</Text>
           </Box>
         )}
       </Box>
 
-      {/* Input */}
       <InputBox
         value={inputValue}
         onChange={setInputValue}
