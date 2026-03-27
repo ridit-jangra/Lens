@@ -59,7 +59,7 @@ export function Input({
         setValue("");
         setHistoryIndex(history.length);
       } else {
-        setValue(history[newIndex]);
+        setValue(history[newIndex] ?? "");
         setHistoryIndex(newIndex);
       }
     } else if (key.escape) {
@@ -75,14 +75,14 @@ export function Input({
 
   return (
     <Box flexDirection="column">
-      {value === "" ? (
-        <Text color="gray">{placeholder}</Text>
-      ) : (
-        <Text>
-          {value}
-          {cursorVisible ? "█" : " "}
-        </Text>
-      )}
+      <Box>
+        {value === "" ? (
+          <Text color="gray">{placeholder}</Text>
+        ) : (
+          <Text>{value}</Text>
+        )}
+        <Text>{cursorVisible ? "█" : " "}</Text>
+      </Box>
       {isCommandOpen && commands && (
         <CommandPalette
           commands={commands}

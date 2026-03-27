@@ -1,15 +1,18 @@
-import { streamText } from "ai";
-import { createProvider } from "./providers";
-import { tools } from "./tools";
+import { chat } from "./agent";
+import { createSession, addMessage, getMessages } from "./session";
 
-const result = streamText({
-  model: createProvider(),
-  tools,
-  maxSteps: 10,
-  prompt:
-    "list all files in the src directory, then read the config/index.ts file and explain it",
+let session = createSession(process.cwd());
+session = addMessage(
+  session,
+  "user",
+  "list files in src and explain what each folder does",
+);
+
+await chat({
+  messages: getMessages(session),
+  onChunk: (chunk) => process.stdout.write(chunk),
+  onToolCall: (tool, args) => console.log(`\n⟩ ${tool}`, args),
+  onFinish: (text) => {
+    session = addMessage(session, "assistant", text);
+  },
 });
-
-for await (const chunk of result.textStream) {
-  process.stdout.write(chunk);
-}
