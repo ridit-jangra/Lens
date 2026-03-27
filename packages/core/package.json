@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "ai": "^4.0.0",
-    "drizzle-orm": "^0.30.0",
-    "bun:sqlite": "*"
+    "drizzle-orm": "^0.30.0"
   },
   "devDependencies": {
     "@ridit/typescript-config": "*"

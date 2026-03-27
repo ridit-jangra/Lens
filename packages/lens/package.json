@@ -1,16 +1,16 @@
 {
-  "name": "@ridit/lens-tui",
+  "name": "@ridit/lens",
   "version": "0.0.1",
-  "private": true,
   "main": "./src/index.tsx",
   "scripts": {
     "dev": "bun src/index.tsx",
     "build": "bun build src/index.tsx --outdir dist"
   },
   "dependencies": {
-    "@ridit/lens-core": "*",
-    "ink": "^5.0.0",
-    "react": "^18.0.0"
+    "ink": "4.4.1",
+    "react": "18.2.0",
+    "@ridit/ink-ui": "*",
+    "@ridit/lens-core": "*"
   },
   "devDependencies": {
     "@types/react": "^18.0.0",
