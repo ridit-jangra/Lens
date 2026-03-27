@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find E:/projects/Lens/packages/ink-ui/src -name *.tsx)",
+      "Bash(find E:/projects/Lens/packages -name *.tsx)",
+      "Bash(find E:/projects/Lens/packages/lens-core/src -name *.ts)",
+      "Bash(find E:/projects/Lens/packages/core/src -name *.ts)"
+    ]
+  }
+}
