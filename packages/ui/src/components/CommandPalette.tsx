@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 
-interface Command {
+export interface Command {
   name: string;
   description: string;
   alias?: string;

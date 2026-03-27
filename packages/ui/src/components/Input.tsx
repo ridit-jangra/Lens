@@ -1,23 +1,12 @@
 import React, { useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import { useState } from "react";
-import { CommandPalette } from "./CommandPalette";
-
-const COMMANDS = [
-  { name: "/init", description: "analyze + index the repo" },
-  { name: "/memory", description: "show what lens knows" },
-  { name: "/diff", description: "file changes this session" },
-  { name: "/timeline", description: "session history" },
-  { name: "/run", description: "run a single task in background" },
-  { name: "/agent", description: "spawn a new parallel agent" },
-  { name: "/skills", description: "available skills" },
-  { name: "/undo", description: "revert last change" },
-  { name: "/clear", description: "clear current session" },
-];
+import { type Command, CommandPalette } from "./CommandPalette";
 
 interface InputProps {
   onSubmit?: (value: string) => void;
   placeholder?: string;
+  commands?: Command[];
 }
 
 export function Input({
@@ -25,6 +14,7 @@ export function Input({
     console.log(value);
   },
   placeholder = "Enter...",
+  commands,
 }: InputProps) {
   const [value, setValue] = useState<string>("");
   const [history, setHistory] = useState<string[]>([]);
@@ -93,9 +83,9 @@ export function Input({
           {cursorVisible ? "█" : " "}
         </Text>
       )}
-      {isCommandOpen && (
+      {isCommandOpen && commands && (
         <CommandPalette
-          commands={COMMANDS}
+          commands={commands}
           query={value}
           isOpen={isCommandOpen}
           onSelect={(cmd) => {
