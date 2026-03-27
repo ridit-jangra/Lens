@@ -1,6 +1,6 @@
 import type { CoreMessage } from "ai";
 
-interface Session {
+export interface Session {
   id: string;
   cwd: string;
   messages: CoreMessage[];
