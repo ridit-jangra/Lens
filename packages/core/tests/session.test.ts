@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { createSession, addMessage, getMessages } from "./index";
+import { createSession, addMessage, getMessages } from "../src/session";
 
 describe("createSession", () => {
   it("sets cwd and empty messages", () => {

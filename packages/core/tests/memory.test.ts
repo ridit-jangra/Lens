@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { writeFileSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
-import { getSystemPrompt, saveSession, loadSession, getLatestSession } from "./index";
-import { createSession, addMessage } from "../session";
+import { getSystemPrompt, saveSession, loadSession, getLatestSession } from "../src/memory";
+import { createSession, addMessage } from "../src/session";
 
 const TMP = join(import.meta.dir, "__tmp__");
 

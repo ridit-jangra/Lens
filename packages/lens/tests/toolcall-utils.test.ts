@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { extractFileDiff, getLabel, getArgDetail } from "./toolcall-utils";
+import { extractFileDiff, getLabel, getArgDetail } from "../src/components/toolcall-utils";
 
 describe("getLabel", () => {
   it("returns running label for known tools", () => {
