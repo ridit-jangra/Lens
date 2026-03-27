@@ -5,6 +5,7 @@ import { tools } from "../tools";
 
 interface AgentOptions {
   messages: CoreMessage[];
+  system?: string;
   onChunk?: (chunk: string) => void;
   onToolCall?: (tool: string, args: unknown) => void;
   onToolResult?: (tool: string, result: unknown) => void;
@@ -16,6 +17,7 @@ export async function chat(options: AgentOptions) {
     model: createProvider(),
     tools,
     messages: options.messages,
+    system: options.system,
     maxSteps: 50,
     onStepFinish: (step) => {
       for (const toolResult of step.toolResults) {
