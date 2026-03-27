@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 
 const MEMORY_DIR = join(homedir(), ".lens", "memory");
-const GLOBAL_MEMORY_PATH = join(homedir(), ".lens", "global-memory.json");
+const GLOBAL_MEMORY_PATH = join(homedir(), ".lens", "global-memory.txt");
 
 // per-repo session
 // runs: git rev-list --max-parents=0 HEAD in cwd
