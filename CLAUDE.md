@@ -16,9 +16,14 @@ bun run check-types
 
 # Format
 bun run format
-```
 
-There is no test suite. The primary way to validate changes is to run the CLI directly.
+# Run all tests
+bun test
+
+# Run tests for a specific package
+cd packages/core && bun test
+cd packages/lens && bun test
+```
 
 ## Architecture
 
