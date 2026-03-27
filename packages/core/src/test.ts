@@ -16,6 +16,6 @@ await chat({
   onToolCall: (tool, args) => console.log(`\n⟩ ${tool}`, args),
   onFinish: (text) => {
     session = addMessage(session, "assistant", text);
-    saveSession(cwd, session);
+    saveSession(session);
   },
 });

@@ -4,7 +4,7 @@ import { loadGlobalMemory, saveGlobalMemory } from "../memory";
 
 export const remember = tool({
   description:
-    "save something to global memory to remember across all codebases and sessions. use this when the user explicitly asks you to remember something, or when you notice something important about the user's preferences or coding style. before saving, check existing memories and avoid saving duplicate or similar entries.",
+    "save something to global memory ONLY when the user EXPLICITLY says 'remember that...' or 'don't forget...'. do NOT call this automatically.",
   parameters: z.object({
     content: z.string().describe("what to remember"),
   }),

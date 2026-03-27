@@ -12,8 +12,7 @@ export {
   saveSession,
   loadGlobalMemory,
   saveGlobalMemory,
-  getRepoId,
-  sessionExists,
+  getLatestSession,
 } from "./memory";
 
 // config
