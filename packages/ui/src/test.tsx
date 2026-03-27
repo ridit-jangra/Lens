@@ -1,18 +1,6 @@
 import React from "react";
 import { Markdown } from "./components/Markdown";
 import { render } from "ink";
+import { Input } from "./components/Input";
 
-render(
-  <Markdown>
-    {`# Heading
-  **bold text** and _italic_
-  
-  \`\`\`js
-  const x = 1
-  \`\`\`
-  | name | type | value |
-|------|------|-------|
-| x    | int  | 1     |
-  `}
-  </Markdown>,
-);
+render(<Input />);
