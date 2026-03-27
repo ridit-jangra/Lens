@@ -1,0 +1,15 @@
+{
+  "name": "@ridit/lens-sdk",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist"
+  },
+  "dependencies": {
+    "@ridit/lens-core": "*"
+  },
+  "devDependencies": {
+    "@ridit/typescript-config": "*"
+  }
+}
