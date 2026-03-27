@@ -1,12 +1,13 @@
 import { streamText } from "ai";
 import { createProvider } from "./providers";
-import { read } from "./tools/read";
+import { tools } from "./tools";
 
-const result = await streamText({
+const result = streamText({
   model: createProvider(),
-  tools: { read },
-  maxSteps: 5,
-  prompt: "read the file src/config/index.ts and explain what it does",
+  tools,
+  maxSteps: 10,
+  prompt:
+    "list all files in the src directory, then read the config/index.ts file and explain it",
 });
 
 for await (const chunk of result.textStream) {
