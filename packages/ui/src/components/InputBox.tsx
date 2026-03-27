@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text, useStdout } from "ink";
 import { TextArea } from "./TextArea";
-
-const ACCENT = "cyan";
+import { ACCENT } from "../colors";
 
 export function InputBox({
   value,
@@ -10,12 +9,14 @@ export function InputBox({
   onSubmit,
   inputKey,
   placeholder = "ask anything...",
+  disabled = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSubmit: (v: string) => void;
   inputKey?: number;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const { stdout } = useStdout();
   const [cols, setCols] = useState(stdout?.columns ?? 80);
@@ -31,18 +32,21 @@ export function InputBox({
   const rule = "─".repeat(Math.max(1, cols - 4));
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" marginTop={1}>
       <Text color="gray" dimColor>
         {rule}
       </Text>
       <Box gap={1}>
-        <Text color={ACCENT}>{">"}</Text>
+        <Text color={disabled ? "gray" : ACCENT} dimColor={disabled}>
+          ◆
+        </Text>
         <TextArea
           key={inputKey}
           value={value}
           onChange={onChange}
           onSubmit={onSubmit}
-          placeholder={placeholder}
+          placeholder={disabled ? "waiting..." : placeholder}
+          focus={!disabled}
         />
       </Box>
       <Text color="gray" dimColor>
@@ -52,13 +56,12 @@ export function InputBox({
   );
 }
 
-export function ShortcutBar({ isLoading }: { isLoading?: boolean }) {
+export function ShortcutBar() {
   return (
-    <Box gap={3}>
+    <Box>
       <Text color="gray" dimColor>
-        enter send · shift+enter newline · ctrl+← → word · ^c exit
+        ↵ send · ⇧↵ newline · ^←→ word · ^c quit
       </Text>
-      {isLoading && <Text color="yellow">thinking... (esc to interrupt)</Text>}
     </Box>
   );
 }
