@@ -1,13 +1,33 @@
-// interface AgentOptions {
-//   messages: Message[]
-//   onChunk?: (chunk: string) => void        // streaming text
-//   onToolCall?: (tool, args) => void        // tool started
-//   onToolResult?: (tool, result) => void    // tool finished
-//   onFinish?: (text: string) => void        // done
-// }
+import { streamText } from "ai";
+import type { CoreMessage } from "ai";
+import { createProvider } from "../providers";
+import { tools } from "../tools";
 
-// internally:
-// 1. loadConfig() → createProvider()
-// 2. streamText({ model, tools, messages, maxSteps: 50 })
-// 3. fires callbacks for TUI to render
-// runAgent(options: AgentOptions) → AsyncGenerator
+interface AgentOptions {
+  messages: CoreMessage[];
+  onChunk?: (chunk: string) => void;
+  onToolCall?: (tool: string, args: unknown) => void;
+  onToolResult?: (tool: string, result: unknown) => void;
+  onFinish?: (text: string) => void;
+}
+
+export async function chat(options: AgentOptions) {
+  const result = streamText({
+    model: createProvider(),
+    tools,
+    messages: options.messages,
+    maxSteps: 50,
+    onStepFinish: (step) => {
+      for (const toolResult of step.toolResults) {
+        options.onToolCall?.(toolResult.toolName, toolResult.args);
+        options.onToolResult?.(toolResult.toolName, toolResult.result);
+      }
+    },
+  });
+
+  for await (const chunk of result.textStream) {
+    options.onChunk?.(chunk);
+  }
+
+  options.onFinish?.(await result.text);
+}
