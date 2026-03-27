@@ -1,7 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-
-const ACCENT = "cyan";
+import { ACCENT } from "../colors";
 
 function InlineText({ text }: { text: string }) {
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
@@ -30,15 +29,23 @@ function InlineText({ text }: { text: string }) {
   );
 }
 
-function CodeBlock({ code }: { lang: string; code: string }) {
+function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const lines = code.split("\n");
   return (
     <Box flexDirection="column">
-      {code.split("\n").map((line, i) => (
+      <Text color="gray" dimColor>
+        {"  ╭─"}
+        {lang ? ` ${lang}` : ""}
+      </Text>
+      {lines.map((line, i) => (
         <Text key={i} color={ACCENT}>
-          {"  "}
+          {"  │ "}
           {line}
         </Text>
       ))}
+      <Text color="gray" dimColor>
+        {"  ╰─"}
+      </Text>
     </Box>
   );
 }
@@ -59,6 +66,7 @@ export function MessageBody({ content }: { content: string }) {
           return <CodeBlock key={si} lang={lang} code={code} />;
         }
         const lines = seg.split("\n").filter((l) => l.trim() !== "");
+        if (lines.length === 0) return null;
         return (
           <Box key={si} flexDirection="column">
             {lines.map((line, li) => {

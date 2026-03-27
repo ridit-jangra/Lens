@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import { GREEN, RED } from "../colors";
 
 interface DiffProps {
   filename: string;
@@ -19,32 +20,30 @@ export function Diff({ additions, filename, deletions, lines }: DiffProps) {
     <Box gap={1} flexDirection="column">
       <Box gap={1}>
         <Text color="white">{filename}</Text>
-        <Text color="green">+{additions}</Text>
-        <Text color="red">-{deletions}</Text>
+        <Text color={GREEN} dimColor>
+          +{additions}
+        </Text>
+        <Text color={RED} dimColor>
+          -{deletions}
+        </Text>
       </Box>
-      <Box gap={1}>
-        <Box flexDirection="column">
-          {lines.map((_, i) => (
-            <Text key={i}>{i + 1}</Text>
-          ))}
-        </Box>
-        <Box flexDirection="column">
-          {lines.map((line, i) => (
-            <Text
-              key={i}
-              color={
-                line.type === "add"
-                  ? "green"
-                  : line.type === "remove"
-                    ? "red"
-                    : "white"
-              }
-            >
-              {line.type === "add" ? "+" : line.type === "remove" ? "-" : ""}{" "}
-              {line.content}
-            </Text>
-          ))}
-        </Box>
+      <Box flexDirection="column" marginLeft={1}>
+        {lines.map((line, i) => (
+          <Text
+            key={i}
+            color={
+              line.type === "add"
+                ? GREEN
+                : line.type === "remove"
+                  ? RED
+                  : "gray"
+            }
+            dimColor={line.type === "context"}
+          >
+            {line.type === "add" ? "+ " : line.type === "remove" ? "- " : "  "}
+            {line.content}
+          </Text>
+        ))}
       </Box>
     </Box>
   );
