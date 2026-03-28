@@ -1,10 +1,20 @@
 #!/bin/sh
-# Run bun publish when a tag is being pushed
+# Run bun publish for each public workspace package when a tag is being pushed
 
 while read local_ref local_sha remote_ref remote_sha; do
   if echo "$local_ref" | grep -q "refs/tags/"; then
     echo "Tag push detected ($local_ref) — publishing packages..."
-    bun publish --access public
-    exit $?
+    for pkg_dir in packages/*/; do
+      pkg_json="$pkg_dir/package.json"
+      if [ -f "$pkg_json" ]; then
+        is_private=$(node -e "const p=require('./$pkg_json'); process.stdout.write(p.private ? 'true' : 'false')")
+        if [ "$is_private" = "false" ]; then
+          pkg_name=$(node -e "const p=require('./$pkg_json'); process.stdout.write(p.name)")
+          echo "Publishing $pkg_name..."
+          (cd "$pkg_dir" && bun publish --access public) || exit 1
+        fi
+      fi
+    done
+    exit 0
   fi
 done
