@@ -27,7 +27,7 @@ import {
 // ── Headless chat (--dev or --single + --prompt, no Ink UI) ──────────────────
 
 // Safe (read-only) tools that never need approval
-const HEADLESS_SAFE_TOOLS = new Set(["read", "grep", "ls", "remember"]);
+const HEADLESS_SAFE_TOOLS = new Set(["read", "grep", "ls", "remember", "search"]);
 
 // Words that mean "approve the last denied operation"
 const APPROVAL_WORDS = new Set(["execute", "yes", "proceed", "do it", "confirm", "allow", "ok", "approve"]);
