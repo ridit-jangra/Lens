@@ -6,6 +6,8 @@ export interface ProviderSettings {
   apiKey: string;
   model?: string;
   baseURL?: string;
+  maxTokens?: number;
+  temperature?: number;
 }
 
 export type Provider = "anthropic" | "openai" | "google" | "groq" | "openrouter" | "ollama" | "custom";
@@ -37,7 +39,7 @@ export function loadConfig(): Config {
 }
 
 export function saveConfig(config: Config): void {
-  writeFileSync(CONFIG_PATH, JSON.stringify(config));
+  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
 export function configExists(): boolean {
@@ -62,7 +64,7 @@ export function setActiveProvider(provider: Provider): void {
 
   const newConfig = { ...config, activeProvider: provider } as Config;
 
-  writeFileSync(CONFIG_PATH, JSON.stringify(newConfig));
+  writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2));
 }
 
 export function addProvider(

@@ -90,7 +90,7 @@ Once inside a `lens chat` session, use slash commands:
 
 ## Extending Lens
 
-Custom tools can be built and registered using `[@ridit/lens-sdk](https://www.npmjs.com/package/@ridit/lens-sdk)`.
+Custom tools can be built and registered using [`@ridit/lens-sdk`](https://www.npmjs.com/package/@ridit/lens-sdk).
 
 ## License
 

@@ -12,9 +12,9 @@ describe("getSystemPrompt", () => {
     expect(prompt).toContain("/some/nonexistent/dir");
   });
 
-  it("mentions no memory when LENS.md is absent", () => {
+  it("does not include project context when LENS.md is absent", () => {
     const prompt = getSystemPrompt("/some/nonexistent/dir");
-    expect(prompt).toContain("No memory yet");
+    expect(prompt).not.toContain("## Project Context");
   });
 
   it("includes LENS.md content when present", () => {
@@ -23,7 +23,7 @@ describe("getSystemPrompt", () => {
 
     const prompt = getSystemPrompt(TMP);
     expect(prompt).toContain("My Project");
-    expect(prompt).toContain("Codebase Context");
+    expect(prompt).toContain("Project Context");
 
     rmSync(TMP, { recursive: true, force: true });
   });

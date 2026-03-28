@@ -20,6 +20,7 @@ mock.module("ai", () => ({
 
 mock.module("../src/providers", () => ({
   createProvider: mock(() => "mock-model"),
+  getActiveModelName: mock(() => "mock-model"),
 }));
 
 const { chat } = await import("../src/agent/index.ts");
