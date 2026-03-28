@@ -28,10 +28,7 @@ program
   .option("--auto", "Stage all changes and commit without confirmation")
   .option("--push", "Push to remote after committing")
   .action(
-    (
-      files: string[],
-      opts: { path: string; auto: boolean; push: boolean },
-    ) => {
+    (files: string[], opts: { path: string; auto: boolean; push: boolean }) => {
       const fileList =
         (files ?? []).length > 0 ? ` for files: ${files.join(", ")}` : "";
       const extra = opts.auto
@@ -111,7 +108,6 @@ program
     );
   });
 
-// Default: no subcommand → open chat
 if (process.argv.length <= 2 || process.argv[2]?.startsWith("-")) {
   render(<ChatCommand path="." />);
 } else {
