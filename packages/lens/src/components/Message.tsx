@@ -25,8 +25,8 @@ export function Message({ children, role }: MessageProps) {
   if (role === "user") {
     return (
       <Box gap={1} paddingLeft={1}>
-        <Text color="gray" dimColor>
-          you
+        <Text color={ACCENT} dimColor>
+          ▸
         </Text>
         <Text color="white">{text}</Text>
       </Box>

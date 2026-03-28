@@ -11,7 +11,16 @@
       "Bash(where python:*)",
       "Bash(where py:*)",
       "Read(//usr/**)",
-      "Bash(\"C:/Users/Time Machine/AppData/Local/Programs/Python/Python312/python.exe\" .claude/skills/ui-ux-pro-max/scripts/search.py \"terminal cli chat developer tool ai assistant dark mode minimal\" --design-system -p \"Lens CLI\")"
+      "Bash(\"C:/Users/Time Machine/AppData/Local/Programs/Python/Python312/python.exe\" .claude/skills/ui-ux-pro-max/scripts/search.py \"terminal cli chat developer tool ai assistant dark mode minimal\" --design-system -p \"Lens CLI\")",
+      "Bash(bun run:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(find E:/projects/Lens/lens-old -name *.ts -o -name *.tsx)",
+      "Bash(grep -E \"^\\(figures|chalk|ink-spinner|commander\\)$\")",
+      "Bash(bun add:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(timeout 5 bun ../packages/lens/src/index.tsx)"
     ]
   }
 }

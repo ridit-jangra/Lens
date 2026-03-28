@@ -1,0 +1,418 @@
+import { useEffect, useRef, useState } from "react";
+
+const TIPS = [
+  "use /auto to toggle auto-approve for safe tools",
+  "ctrl+f to toggle force-all mode",
+  "shift+enter for a new line in the input",
+  "↑ / ↓ arrows navigate message history",
+  "ctrl+w deletes the previous word",
+  "ctrl+delete deletes the next word",
+  "/timeline to browse commit history",
+  "/review to analyze the current codebase",
+  "/memory list to view stored memories",
+  "/chat list to see saved conversations",
+  "esc cancels a running response",
+  "/clear history resets session memory",
+  "tab autocompletes slash commands",
+  "lens commit --auto for fast AI commits",
+  "lens run \"bun dev\" to watch and auto-fix errors",
+];
+
+const PHRASES: Record<string, string[]> = {
+  general: [
+    "marinating on that... 🍖",
+    "letting it simmer... 🍲",
+    "preheating the brain... 🔥",
+    "seasoning the response... 🧂",
+    "slow cooking an answer... 🐢",
+    "whisking it together... 🥄",
+    "folding in the context... 📄",
+    "reducing the codebase... 🧠",
+    "deglazing with tokens... ✨",
+    "plating the thoughts... 🍽️",
+    "blending the chaos... 🌀",
+    "tasting the logic... 👅",
+    "kneading the ideas... 🥖",
+    "sautéing thoughts... 🍳",
+    "folding in extra brainpower... 🧠",
+    "caramelizing the mistakes... 🍯",
+    "letting it chill... ❄️",
+    "flambéing the bugs... 🔥",
+    "mixing code and chaos... 🥣",
+    "plating the hot take... 🔥🍽️",
+    "simmering existential dread... 🫠",
+    "tempering the output... ⚡",
+    "basting with logic... 🧂",
+    "drizzling insight... 🌧️",
+    "sprinkling genius... ✨",
+    "slow roasting complexity... 🐢🔥",
+    "blending the universe... 🌌",
+    "whipping up brilliance... 🥄💡",
+    "folding in main character energy... 🌟",
+    "checking internal temperatures... 🌡️",
+    "it's giving... answers 💅",
+    "no cap, thinking fr fr... 🧢",
+    "lowkey cooking something bussin... 🍳",
+    "understood the assignment... 📋✨",
+    "ate and left no crumbs... 🍽️",
+    "the delulu is the solulu... 🌈",
+    "giving it the roman empire treatment... 🏛️",
+    "slay mode activated... 💅",
+    "not me actually thinking rn... 😭",
+    "this ain't it chief... wait yes it is... 👑",
+    "rent free in the context window... 🏠",
+    "it's the tokens for me... ✨",
+    "vibing with the prompt... 🎵",
+    "main character moment incoming... 🎬",
+    "we move... 🫡🫡",
+    "rizzing up an answer... 🗣️",
+    "rizzing up a baddie answer... 😏",
+  ],
+
+  cloning: [
+    "cloning at the speed of git... 🚀",
+    "negotiating with github... 🤝",
+    "untangling the object graph... 🧶",
+    "counting commits like sheep... 🐑",
+    "shallow clone, deep thoughts... 🌊",
+    "fetching the whole iceberg... 🧊",
+    "packing objects... 📦",
+    "resolving deltas... 🔄",
+    "checking out the vibes... 😎",
+    "recursing into submodules... 🔁",
+    "buffering the bits... 💾",
+    "git is being git... 🤷",
+    "praying to the network gods... 🙏",
+    "downloading the internet (just your repo)... 🌐",
+    "forking in style... 🍴",
+    "pulling commits aggressively... 🏃‍♂️",
+    "syncing the vibes... 🌊",
+    "deep cloning existential crises... 😵",
+    "cherry-picking brilliance... 🍒",
+    "rewriting history (just a little)... 📝",
+    "fast-forwarding thoughts... ⏩",
+    "merging with the multiverse... 🌌",
+    "rebasing reality... 🔄",
+    "cloning like a pro... 👑",
+    "buffer overflow in progress... 💾",
+    "pull request to sanity... 🤯",
+    "diverging the timeline... ⏳",
+    "squashing git guilt... 🪓",
+    "fetching inspiration... 📡",
+    "pruning branches... 🌿",
+    "syncing neurons... 🧠",
+    "shallow clone, deep existential dread... 🌊😵",
+    "ate the repo and left no crumbs... 🍽️",
+    "this repo said no cap... 🧢",
+    "cloning the main character arc... 🎬",
+    "snatching the source code... 💅",
+    "github said understood the assignment... ✨",
+    "bestie said fetch... 📡",
+    "giving the repo its flowers... 💐",
+    "core memory unlocked: git clone... 🧠",
+    "no diff, no life... 🫠",
+  ],
+
+  analyzing: [
+    "reading every file (skimming)... 📖",
+    "building a mental model... 🧠",
+    "reverse engineering intent... 🔍",
+    "parsing the chaos... 🌀",
+    "connecting the dots... 🔗",
+    "finding the load-bearing files... 🏗️",
+    "mapping the dependency graph... 🗺️",
+    "absorbing the architecture... 🧱",
+    "noticing things... 👀",
+    "judging your folder structure... 😭",
+    "appreciating the tech debt... 💳",
+    "counting your TODOs... 📋",
+    "reading between the lines... ✍️",
+    "following the import trail... 🧭",
+    "speed-reading your life's work... ⚡",
+    "pretending to understand your monorepo... 🏢",
+    "debugging the cosmos... 🌌",
+    "profiling your thoughts... 📊",
+    "sifting through the noise... 🌪️",
+    "predicting your next move... 🔮",
+    "absorbing the vibes... 🧘",
+    "peering into recursion... 🔁",
+    "counting edge cases... ⚠️",
+    "parsing your aura... 🌈",
+    "reading the README of life... 📖",
+    "analyzing existential types... 🤯",
+    "checking for ghost functions... 👻",
+    "validating vibes... ✅",
+    "understood the codebase assignment... 📋✨",
+    "this folder structure is NOT it... 😭",
+    "the tech debt said rent free... 🏠",
+    "ate the architecture... 🍽️",
+    "giving the codebase the side eye... 👀",
+    "no cap this code goes hard... 🧢🔥",
+    "the imports are giving chaos... 🌀",
+    "bestie said touch grass... but first, touch files... 🌿",
+    "core memory unlocked: spaghetti code... 🍝",
+    "it's giving legacy... 💀",
+    "main character files identified... 🎬",
+    "the TODO comments said it all... 😤",
+  ],
+
+  model: [
+    "deciding which files matter... 🧠",
+    "picking the important ones... 🎯",
+    "triaging your codebase... 🚑",
+    "figuring out where to look... 👀",
+    "consulting the file oracle... 🔮",
+    "narrowing it down... 🔍",
+    "skimming the directory... 📂",
+    "not reading everything (smart)... 😎",
+    "filtering the noise... 🔇",
+    "pinging the motherbrain... 🧠",
+    "waiting on the neurons... ⏳",
+    "tokens incoming... 📥",
+    "model is cooking... 🍳",
+    "inference in progress... ⚙️",
+    "the GPU is thinking... 💻",
+    "attention is all we need... 🎯",
+    "softmaxing the options... 📊",
+    "sampling from the distribution... 🎲",
+    "temperature: just right... 🌡️",
+    "context window: not full yet... 🪟",
+    "next token any second now... ⏳",
+    "beaming thoughts from the datacenter... 📡",
+    "anthropic servers sweating... 💦",
+    "matrix multiply in progress... ➗",
+    "initializing hype mode... 🚀",
+    "loading chaotic energy... ⚡",
+    "predicting your mood... 😏",
+    "sampling absurdity... 🎲",
+    "activating main character module... 🎬",
+    "warming up GPU... 💻🔥",
+    "calculating cringe factor... 🤡",
+    "loading meme embeddings... 🗿",
+    "clipping gradients of patience... ✂️",
+    "the model said understood... ✨",
+    "tokens said no cap... 🧢",
+    "GPU said slay... 💅",
+    "attention heads said bestie... 👀",
+    "inference said we move... 🚶",
+    "model ate and left no crumbs... 🍽️",
+    "the context window said it's giving... 🪟✨",
+    "softmax said understood the assignment... 📊",
+    "neurons said main character energy... 🧠🌟",
+    "it's giving transformer energy... 🤖",
+    "the embeddings said rent free... 🏠",
+    "lowkey the model is built different... 💪",
+  ],
+
+  summary: [
+    "synthesizing the chaos... 🧠",
+    "forming an opinion... 💭",
+    "writing the verdict... 📝",
+    "digesting everything... 🍽️",
+    "putting it all together... 🧩",
+    "crafting the overview... ✨",
+    "making sense of it all... 🤔",
+    "distilling the essence... 🧪",
+    "summarizing your life's work... 📚",
+    "turning files into feelings... 💔",
+    "extracting signal from noise... 📡",
+    "generating hot takes... 🔥",
+    "cooking up the analysis... 🍳",
+    "almost done judging your code... 👀",
+    "writing the report card... 📊",
+    "digesting chaos into art... 🎨",
+    "compressing existential dread... 🫠",
+    "packaging thoughts nicely... 📦",
+    "synthesizing main character energy... 🌟",
+    "boiling down code spaghetti... 🍝",
+    "condensing into brilliance... ✨",
+    "giving verdict with style... 😎",
+    "folding in chaos gracefully... 🌀",
+    "capturing essence... 📸",
+    "writing the epic conclusion... 📜",
+    "making insights bussin... 🥵",
+    "finishing the mental buffet... 🍽️",
+    "the verdict said no cap... 🧢",
+    "ate the analysis and left no crumbs... 🍽️✨",
+    "understood the assignment, delivering... 📋💅",
+    "it's giving final boss energy... 👑",
+    "the summary said slay... 💅",
+    "hot take incoming, no cap... 🔥🧢",
+    "core memory unlocked: the truth... 🧠",
+    "main character conclusion activated... 🎬",
+    "giving the codebase its honest review... 💀",
+    "the analysis said we move... 🚶✨",
+    "lowkey this code needs therapy... 🛋️",
+    "it's giving mixed reviews bestie... 😬",
+  ],
+
+  task: [
+    "thinking about your ask... 🤔",
+    "processing the request... ⚙️",
+    "on it... 🫡",
+    "got it, working... 💻",
+    "considering the angles... 🔺",
+    "thinking this through... 🧠",
+    "working on it... 🔧",
+    "cooking up a plan... 🍳",
+    "breaking it down... 🧩",
+    "figuring out the approach... 🧭",
+    "strategizing... 📊",
+    "locking in... 🔒",
+    "challenge accepted... ⚔️",
+    "igniting the thinking engines... 🔥",
+    "assembling the mental toolkit... 🛠️",
+    "deploying logic... 🚀",
+    "strategizing with style... 💅",
+    "thinking outside the semicolon... ;",
+    "iterating on brilliance... 🔄",
+    "debugging plan... 🐞",
+    "forming master plan... 🏗️",
+    "finalizing strategy... ✅",
+    "understood the assignment fr... 📋✨",
+    "no cap, on it... 🧢🫡",
+    "ate the task and left no crumbs... 🍽️",
+    "it's giving solution energy... 💡",
+    "main character mode: activated... 🎬",
+    "bestie said get it done... 💅",
+    "lowkey about to cook... 🍳🔥",
+    "the plan said slay... 👑",
+    "we move, no thoughts, only code... 🚶💻",
+    "challenge said hold my tokens... ⚡",
+    "core memory unlocked: the fix... 🧠✨",
+    "rent free in my task queue... 🏠",
+    "it's giving productive... ⚙️✨",
+    "the solution is built different... 💪",
+  ],
+
+  commit: [
+    "sniffing the diff... 👃",
+    "reading your crimes... 😭",
+    "git add -A (the audacity)... 😤",
+    "crafting the perfect lie^H^H^H message... 📝",
+    "summoning commit message energy... ✨",
+    "writing words that will haunt the git log... 👻",
+    "pretending this was intentional all along... 😎",
+    "making it sound like a feature... 🚀",
+    "staging your changes (and your career)... 📦",
+    "turning chaos into conventional commits... 🧠",
+    "making history. literally... 📜",
+    "git blame: not it... 🫣",
+    "this commit brought to you by AI... 🤖",
+    "imperative mood activated... ⚡",
+    "72 chars or bust... 📏",
+    "no WIP commits on my watch... 🚫",
+    "writing the commit future-you will thank me for... 🙏",
+    "touching the object store... 🗄️",
+    "squash? no. this one deserves to live... 🧬",
+    "git log will remember this... 📖",
+    "diffing the vibe before committing... 🔍",
+    "committing to the bit. and also the repo... 💾",
+    "generating a message with zero typos (probably)... 😅",
+    "making main proud... 🏆",
+    "blaming the compiler... 🤖",
+    "squashing typos... ✂️",
+    "committing main character vibes... 🎬",
+    "quantifying audacity... 😤",
+    "git blame: me again... 😎",
+    "committing crimes on the crimes command... 🔄",
+    "lens committing lens. we're in the matrix... 🌀",
+    "self-hosting the audacity... 😤",
+    "git push origin self-awareness... 🧠",
+    "third time's the charm... 🤞",
+    "the diff said no cap... 🧢",
+    "ate the staged changes and left no crumbs... 🍽️",
+    "understood the commit assignment... 📋✨",
+    "it's giving conventional commits... 💅",
+    "the git log said main character only... 🎬👑",
+    "bestie said push it... 📡",
+    "lowkey this diff goes hard... 🔥",
+    "the commit message said slay... 💅✨",
+    "core memory unlocked: touching prod... 😭",
+    "it's giving feat: energy... ⚡",
+    "no WIP commits, we're built different... 💪",
+    "git said understood the assignment... ✨",
+    "pushing to main with zero hesitation... 🚀",
+    "the changelog said rent free... 🏠",
+  ],
+};
+
+export type ThinkingKind = keyof typeof PHRASES;
+
+export function useThinkingTip(active: boolean, intervalMs = 8000): string {
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
+  const usedRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!active) return;
+    const pickUnused = () => {
+      if (usedRef.current.size >= TIPS.length) usedRef.current.clear();
+      let next: number;
+      do {
+        next = Math.floor(Math.random() * TIPS.length);
+      } while (usedRef.current.has(next));
+      usedRef.current.add(next);
+      return next;
+    };
+    setIndex(pickUnused());
+    const id = setInterval(() => setIndex(pickUnused()), intervalMs);
+    return () => clearInterval(id);
+  }, [active, intervalMs]);
+
+  return TIPS[index]!;
+}
+
+export function useThinkingTimer(active: boolean): string {
+  const [seconds, setSeconds] = useState(0);
+  const startRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (active) {
+      startRef.current = Date.now();
+      setSeconds(0);
+      const id = setInterval(() => {
+        setSeconds(Math.floor((Date.now() - (startRef.current ?? Date.now())) / 1000));
+      }, 1000);
+      return () => clearInterval(id);
+    } else {
+      startRef.current = null;
+      setSeconds(0);
+    }
+  }, [active]);
+
+  if (!active || seconds === 0) return "";
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+export function useThinkingPhrase(
+  active: boolean,
+  kind: ThinkingKind = "general",
+  intervalMs = 4321,
+): string {
+  const list = PHRASES[kind]!;
+  const [index, setIndex] = useState(() =>
+    Math.floor(Math.random() * list.length),
+  );
+  const usedRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!active) return;
+
+    const pickUnused = () => {
+      if (usedRef.current.size >= list.length) usedRef.current.clear();
+      let next;
+      do {
+        next = Math.floor(Math.random() * list.length);
+      } while (usedRef.current.has(next));
+      usedRef.current.add(next);
+      return next;
+    };
+
+    setIndex(pickUnused());
+    const id = setInterval(() => setIndex(pickUnused()), intervalMs);
+    return () => clearInterval(id);
+  }, [active, kind, intervalMs]);
+
+  return list[index]!;
+}

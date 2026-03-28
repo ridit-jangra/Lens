@@ -49,9 +49,6 @@ export function InputBox({
           focus={!disabled}
         />
       </Box>
-      <Text color="gray" dimColor>
-        {rule}
-      </Text>
     </Box>
   );
 }
