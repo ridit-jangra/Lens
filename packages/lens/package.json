@@ -1,6 +1,6 @@
 {
   "name": "@ridit/lens",
-  "version": "0.4.1",
+  "version": "0.4.4",
   "description": "Understand your codebase.",
   "author": "Ridit Jangra <riditjangra09@gmail.com> (https://ridit.space)",
   "license": "MIT",
@@ -14,26 +14,24 @@
   },
   "scripts": {
     "dev": "bun src/index.tsx",
-    "build": "bun build src/index.tsx --target node --outfile dist/index.mjs --external react-devtools-core",
+    "build": "bun build src/index.tsx --target node --outfile dist/index.mjs --external react-devtools-core --external ink --external react --external chalk --external commander --external figures --external ink-spinner",
     "postbuild": "node -e \"const fs=require('fs');const f='dist/index.mjs';fs.writeFileSync(f,'#!/usr/bin/env node\\n'+fs.readFileSync(f,'utf8'))\"",
-    "prepublishOnly": "bun run build",
+    "prepublishOnly": "npm run build",
     "test": "bun test"
   },
   "dependencies": {
-    "@ridit/ink-ui": "*",
-    "@ridit/lens-core": "*",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
     "figures": "^6.1.0",
     "ink": "4.4.1",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
-    "react": "18.2.0"
+    "react": "18.2.0",
+    "react-devtools-core": "^7.0.1"
   },
   "devDependencies": {
     "@types/react": "^18.0.0",
-    "@types/bun": "latest",
-    "@ridit/typescript-config": "*"
+    "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
