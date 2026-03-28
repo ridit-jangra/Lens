@@ -26,6 +26,7 @@ import {
 } from "@ridit/lens-core";
 import { useChatInput } from "../../hooks/useChatInput";
 import { handleCommand } from "../../hooks/useCommandHandler";
+import Spinner from "ink-spinner";
 
 // ── Static header (renders once, stays pinned) ────────────────────────────────
 
@@ -116,7 +117,6 @@ function CommandPalette({ query }: { query: string }) {
     </Box>
   );
 }
-
 
 // ── Main runner ───────────────────────────────────────────────────────────────
 
@@ -296,12 +296,17 @@ export function ChatRunner({
             devTools.push({ tool, args, result: null });
           },
           onToolResult: (tool, result) => {
-            const entry = [...devTools].reverse().find((t) => t.tool === tool && t.result === null);
+            const entry = [...devTools]
+              .reverse()
+              .find((t) => t.tool === tool && t.result === null);
             if (entry) entry.result = result;
           },
           onFinish: (fullText, responseMessages, model) => {
             if (!single) {
-              sessionRef.current = appendMessages(sessionRef.current, responseMessages);
+              sessionRef.current = appendMessages(
+                sessionRef.current,
+                responseMessages,
+              );
               saveSession(sessionRef.current);
             }
             process.stdout.write(
@@ -345,7 +350,8 @@ export function ChatRunner({
         messages: getMessages(sessionRef.current),
         system: getSystemPrompt(repoPath),
         onBeforeToolCall: (tool, args) => {
-          if (forceApproveRef.current || SAFE_TOOLS.has(tool)) return Promise.resolve(true);
+          if (forceApproveRef.current || SAFE_TOOLS.has(tool))
+            return Promise.resolve(true);
           const label = getToolLabel(tool, args);
           return new Promise((resolve) => {
             setApprovalRequest({ tool, args, label });
@@ -394,7 +400,10 @@ export function ChatRunner({
         onFinish: (fullText, responseMessages) => {
           if (!abort.signal.aborted) {
             // always save full response messages (includes tool calls) for context
-            sessionRef.current = appendMessages(sessionRef.current, responseMessages);
+            sessionRef.current = appendMessages(
+              sessionRef.current,
+              responseMessages,
+            );
             if (!single) saveSession(sessionRef.current);
 
             if (fullText.trim()) {
@@ -431,7 +440,9 @@ export function ChatRunner({
   return (
     <Box flexDirection="column">
       <Static items={HEADER_ITEMS}>
-        {(_, i) => <AppHeader key={i} model={getActiveModelName()} repoPath={repoPath} />}
+        {(_, i) => (
+          <AppHeader key={i} model={getActiveModelName()} repoPath={repoPath} />
+        )}
       </Static>
       <Static items={committed}>
         {(msg, i) => <StaticMessage key={i} msg={msg} />}
@@ -447,12 +458,14 @@ export function ChatRunner({
           ) : (
             <>
               <Box gap={1}>
-                <Text color={ACCENT}>●</Text>
-                <TypewriterText text={thinkingPhrase} />
+                <Text color={ACCENT}>
+                  <Spinner type="star"></Spinner>
+                </Text>
+                <Text color={ACCENT}>{thinkingPhrase}</Text>
               </Box>
-              <Box marginLeft={2}>
+              <Box marginLeft={2} marginBottom={1}>
                 <Text color="gray" dimColor>
-                  tip: {thinkingTip}
+                  └ tip: {thinkingTip}
                 </Text>
               </Box>
             </>
@@ -464,17 +477,32 @@ export function ChatRunner({
         <Box flexDirection="column" marginTop={1} marginLeft={2} gap={0}>
           <Box gap={1}>
             <Text color="yellow">?</Text>
-            <Text color={ACCENT}>{TOOL_ICONS[approvalRequest.tool] ?? "·"}</Text>
-            <Text color="white">{approvalRequest.label || approvalRequest.tool}</Text>
+            <Text color={ACCENT}>
+              {TOOL_ICONS[approvalRequest.tool] ?? "·"}
+            </Text>
+            <Text color="white">
+              {approvalRequest.label || approvalRequest.tool}
+            </Text>
           </Box>
           <Box gap={1} marginLeft={2}>
-            <Text color="gray" dimColor>allow?</Text>
+            <Text color="gray" dimColor>
+              allow?
+            </Text>
             <Text color={GREEN}>y</Text>
-            <Text color="gray" dimColor> yes  ·  </Text>
+            <Text color="gray" dimColor>
+              {" "}
+              yes ·{" "}
+            </Text>
             <Text color={RED}>n</Text>
-            <Text color="gray" dimColor> no  ·  </Text>
+            <Text color="gray" dimColor>
+              {" "}
+              no ·{" "}
+            </Text>
             <Text color={ACCENT}>a</Text>
-            <Text color="gray" dimColor> allow all</Text>
+            <Text color="gray" dimColor>
+              {" "}
+              allow all
+            </Text>
           </Box>
         </Box>
       )}

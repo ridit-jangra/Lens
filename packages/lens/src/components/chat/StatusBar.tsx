@@ -97,7 +97,7 @@ export function InputBox({
 const SHORTCUTS = [
   ["↵", "send"],
   ["^↵", "line"],
-  ["^⌫", "word"],
+  ["^⌫", " word"],
   ["^f", "force"],
   ["^c", "exit"],
 ] as const;
@@ -113,19 +113,27 @@ export function ShortcutBar({
   isThinking?: boolean;
   model?: string;
 }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!isThinking) {
+      setElapsed(0);
+      return;
+    }
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [isThinking]);
+
   if (isThinking) {
     return (
       <Box marginTop={0} gap={1}>
         <Text color={ACCENT}>
           <Spinner type="dots" />
         </Text>
-        {model && (
-          <Text color="gray" dimColor>
-            {model}
-          </Text>
-        )}
+        {model && <Text color="gray">{model}</Text>}
         <Text color="gray" dimColor>
-          · esc cancel
+          ({elapsed}s · esc cancel)
         </Text>
       </Box>
     );
@@ -155,13 +163,8 @@ export function ShortcutBar({
         ) : null}
         {model && (
           <>
-            <Text color="gray" dimColor>
-              {" "}
-              ·{" "}
-            </Text>
-            <Text color="gray" dimColor>
-              {model}
-            </Text>
+            <Text color={ACCENT}> ● </Text>
+            <Text color="gray">{model}</Text>
           </>
         )}
       </Box>
@@ -169,17 +172,9 @@ export function ShortcutBar({
       <Box>
         {SHORTCUTS.map(([key, desc], i) => (
           <Box key={i}>
-            {i > 0 && (
-              <Text color="gray" dimColor>
-                {" "}
-                ·{" "}
-              </Text>
-            )}
+            {i > 0 && <Text color="gray"> · </Text>}
             <Text color="gray">{key}</Text>
-            <Text color="gray" dimColor>
-              {" "}
-              {desc}
-            </Text>
+            <Text color="gray"> {desc}</Text>
           </Box>
         ))}
       </Box>

@@ -33,11 +33,11 @@ This is a Bun + Turborepo monorepo. Packages import each other via workspace ali
 
 The backend. Key modules:
 
-- **`agent/`** — `chat()` wraps Vercel AI SDK's `streamText`. Fires `onToolCall` after each step completes (i.e. after the tool result is available, not before execution). `maxSteps: 50`.
-- **`providers/`** — reads `~/.lens/config.json` via `getActiveProvider()` and returns the correct Vercel AI SDK `LanguageModel`. Groq uses the OpenAI-compatible adapter.
-- **`tools/`** — `{ read, write, bash, grep, ls, remember }` passed directly to `streamText`. All tool schemas are defined with Zod.
+- **`agent/`** — `chat()` wraps Vercel AI SDK's `streamText`. Fires `onToolCall` after each step completes (i.e. after the tool result is available, not before execution). `maxSteps: 50`. Accepts `onBeforeToolCall` hook for per-tool approval gates; a denied tool returns a "Permission denied" message and halts further tool calls. `maxTokens` and `temperature` from `ProviderSettings` are forwarded to `streamText` when set.
+- **`providers/`** — reads `~/.lens/config.json` via `getActiveProvider()` and returns the correct Vercel AI SDK `LanguageModel`. Supported providers: `anthropic`, `openai`, `google`, `groq`, `openrouter`, `ollama`, `custom`. Groq uses `@ai-sdk/groq`; OpenRouter and Ollama use the OpenAI-compatible adapter with custom `baseURL`. Default models: anthropic → `claude-sonnet-4.5`, openai/custom → `gpt-4o`, google → `gemini-2.0-flash`, groq → `qwen/qwen3-32b`, openrouter → `openai/gpt-4o-mini:free`, ollama → `llama3.2`.
+- **`tools/`** — `{ read, write, bash, grep, ls, remember }` passed directly to `streamText`. All tool schemas are defined with Zod. The `ls` tool outputs file-type icons (e.g. `⌨` for JS/TS, `⚙` for config, `≡` for docs, `🗀` for dirs).
 - **`memory/`** — sessions saved to `~/.lens/memory/{id}.json`. `getSystemPrompt(cwd)` injects `LENS.md` (project context) and `~/.lens/global-memory.txt` (global memory) into the system prompt.
-- **`config/`** — provider config at `~/.lens/config.json`.
+- **`config/`** — provider config at `~/.lens/config.json`. `ProviderSettings` has `apiKey`, `model`, `baseURL`, `maxTokens`, `temperature`. Supports `addProvider`, `removeProvider`, `setActiveProvider`, `getConfiguredProviders` helpers.
 
 ### `packages/lens` (CLI)
 
@@ -63,6 +63,11 @@ Shared Ink components. All color constants exported from `src/colors.ts`:
 - `GREEN`, `YELLOW`, `RED` — tool status, diff lines
 
 `MessageBody` renders markdown-like content: parses ` ``` ` blocks first, then handles `**bold**`, `` `inline code` ``, `# headings`, `- lists`, `1. numbered lists` line by line. Empty segments are skipped to avoid phantom blank lines in Ink.
+
+## CI / Release
+
+- **Husky pre-commit hook** — runs `bun test` before every commit.
+- **GitHub Actions release workflow** (`.github/workflows/release.yml`) — triggers on version tags; compiles a Windows EXE with `bun --compile` and packages it with Inno Setup (`scripts/installer.iss`) into an installer that registers `lens` on `PATH`.
 
 ## Key Constraints
 
