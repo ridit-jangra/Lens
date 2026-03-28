@@ -34,7 +34,13 @@
       "Bash(git -C /e/projects/Lens show 77722e1:src/utils/ai.ts)",
       "Bash(git:*)",
       "Bash(find packages:*)",
-      "Bash(bunx husky:*)"
+      "Bash(bunx husky:*)",
+      "Bash(ls E:/projects/Lens/LICENSE*)",
+      "Bash(for pkg:*)",
+      "Bash(do echo:*)",
+      "Read(//e/projects/Lens/**)",
+      "Bash(done)",
+      "Bash(cat E:/projects/Lens/.claude/rules/*)"
     ]
   }
 }
