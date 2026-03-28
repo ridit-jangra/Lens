@@ -59,9 +59,10 @@ const TOOL_ICONS: Record<string, string> = {
   ls: "d",
   remember: "·",
   search: "?",
+  scrape: "↓",
 };
 
-const SAFE_TOOLS = new Set(["read", "grep", "ls", "remember", "search"]);
+const SAFE_TOOLS = new Set(["read", "grep", "ls", "remember", "search", "scrape"]);
 
 function getToolLabel(tool: string, args: unknown): string {
   if (!args || typeof args !== "object") return tool;
