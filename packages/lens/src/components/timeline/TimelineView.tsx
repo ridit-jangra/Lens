@@ -9,7 +9,7 @@ import {
   summarizeTimeline,
 } from "../../utils/git";
 import type { Commit, DiffFile } from "../../utils/git";
-import { TypewriterText, InputBox } from "../chat/ChatOverlays";
+import { TypewriterText, InputBox } from "../chat/StatusBar";
 import { ACCENT } from "../../colors";
 import {
   chat,
