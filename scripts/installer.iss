@@ -31,7 +31,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "addtopath"; Description: "Add Lens to PATH (recommended)"; GroupDescription: "System integration:"; Flags: checked
+Name: "addtopath"; Description: "Add Lens to PATH (recommended)"; GroupDescription: "System integration:"
 
 [Files]
 Source: "..\packages\lens\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
