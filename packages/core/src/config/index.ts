@@ -8,7 +8,7 @@ export interface ProviderSettings {
   baseURL?: string;
 }
 
-export type Provider = "anthropic" | "openai" | "google" | "groq" | "openrouter";
+export type Provider = "anthropic" | "openai" | "google" | "groq" | "openrouter" | "ollama" | "custom";
 
 export interface Config {
   activeProvider: Provider;
@@ -80,4 +80,24 @@ export function addProvider(
   };
 
   saveConfig(newConfig);
+}
+
+export function removeProvider(provider: Provider): void {
+  const config = loadConfig();
+  const { [provider]: _, ...rest } = config.providers;
+
+  const newConfig: Config = {
+    activeProvider:
+      config.activeProvider === provider
+        ? (Object.keys(rest)[0] as Provider | undefined) ?? config.activeProvider
+        : config.activeProvider,
+    providers: rest as Config["providers"],
+  };
+
+  saveConfig(newConfig);
+}
+
+export function getConfiguredProviders(): Provider[] {
+  const config = loadConfig();
+  return Object.keys(config.providers) as Provider[];
 }
