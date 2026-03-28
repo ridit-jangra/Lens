@@ -96,7 +96,7 @@ async function runHeadless(opts: {
 
   session = addMessage(session, "user", prompt);
   // save now so context is available on follow-up messages even if we exit early
-  if (!opts.single) saveSession(session);
+  if (!opts.single || opts.sessionId) saveSession(session);
 
   const toolLog: { tool: string; args: unknown; result: unknown }[] = [];
   const denied: { tool: string; description: string }[] = [];
@@ -125,7 +125,7 @@ async function runHeadless(opts: {
     },
     onFinish: (message, responseMessages, model) => {
       session = appendMessages(session, responseMessages);
-      if (!opts.single) saveSession(session);
+      if (!opts.single || opts.sessionId) saveSession(session);
 
       const output: Record<string, unknown> = {
         message,
