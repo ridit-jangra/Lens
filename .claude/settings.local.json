@@ -4,7 +4,14 @@
       "Bash(find E:/projects/Lens/packages/ink-ui/src -name *.tsx)",
       "Bash(find E:/projects/Lens/packages -name *.tsx)",
       "Bash(find E:/projects/Lens/packages/lens-core/src -name *.ts)",
-      "Bash(find E:/projects/Lens/packages/core/src -name *.ts)"
+      "Bash(find E:/projects/Lens/packages/core/src -name *.ts)",
+      "Bash(bun test:*)",
+      "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py \"terminal cli chat developer tool ai assistant dark mode minimal\" --design-system -p \"Lens CLI\")",
+      "Bash(bun .claude/skills/ui-ux-pro-max/scripts/search.py \"terminal cli chat developer tool ai assistant dark mode minimal\" --design-system -p \"Lens CLI\")",
+      "Bash(where python:*)",
+      "Bash(where py:*)",
+      "Read(//usr/**)",
+      "Bash(\"C:/Users/Time Machine/AppData/Local/Programs/Python/Python312/python.exe\" .claude/skills/ui-ux-pro-max/scripts/search.py \"terminal cli chat developer tool ai assistant dark mode minimal\" --design-system -p \"Lens CLI\")"
     ]
   }
 }
