@@ -15,15 +15,11 @@ function InlineText({ text }: { text: string }) {
           );
         if (part.startsWith("**") && part.endsWith("**"))
           return (
-            <Text key={i} bold color="white">
+            <Text key={i} bold>
               {part.slice(2, -2)}
             </Text>
           );
-        return (
-          <Text key={i} color="white">
-            {part}
-          </Text>
-        );
+        return <Text key={i}>{part}</Text>;
       })}
     </>
   );
@@ -33,17 +29,19 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   const lines = code.split("\n");
   return (
     <Box flexDirection="column">
-      <Text color="gray" dimColor>
+      <Text color={ACCENT} dimColor>
         {"  ╭─"}
         {lang ? ` ${lang}` : ""}
       </Text>
       {lines.map((line, i) => (
-        <Text key={i} color={ACCENT}>
-          {"  │ "}
-          {line}
-        </Text>
+        <Box key={i}>
+          <Text color={ACCENT} dimColor>
+            {"  │ "}
+          </Text>
+          <Text color="white">{line}</Text>
+        </Box>
       ))}
-      <Text color="gray" dimColor>
+      <Text color={ACCENT} dimColor>
         {"  ╰─"}
       </Text>
     </Box>
@@ -73,15 +71,15 @@ export function MessageBody({ content }: { content: string }) {
               if (line.match(/^#{1,3}\s/))
                 return (
                   <Box key={li}>
-                    <Text bold color="white">
-                      {line.replace(/^#+\s/, "")}
-                    </Text>
+                    <Text bold>{line.replace(/^#+\s/, "")}</Text>
                   </Box>
                 );
               if (line.match(/^[-*•]\s/))
                 return (
                   <Box key={li} gap={1}>
-                    <Text color={ACCENT}>*</Text>
+                    <Text color={ACCENT} dimColor>
+                      ·
+                    </Text>
                     <InlineText text={line.slice(2).trim()} />
                   </Box>
                 );
@@ -89,7 +87,9 @@ export function MessageBody({ content }: { content: string }) {
                 const num = line.match(/^(\d+)\.\s/)![1];
                 return (
                   <Box key={li} gap={1}>
-                    <Text color="gray">{num}.</Text>
+                    <Text color="gray" dimColor>
+                      {num}.
+                    </Text>
                     <InlineText text={line.replace(/^\d+\.\s/, "").trim()} />
                   </Box>
                 );

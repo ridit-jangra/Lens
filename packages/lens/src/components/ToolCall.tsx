@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import { Diff, GREEN, YELLOW, RED } from "@ridit/ink-ui";
+import { GREEN, YELLOW, RED } from "@ridit/ink-ui";
 import {
   FILE_WRITE_TOOLS,
   FILE_READ_TOOLS,
@@ -47,16 +47,19 @@ export function ToolCall({ tool, args, status, tokenCount }: ToolCallProps) {
       </Box>
 
       {hasDiffContent && (
-        <Box marginLeft={2} marginTop={0}>
-          <Diff
-            filename={diff!.path}
-            additions={diff!.additions.length}
-            deletions={diff!.removals.length}
-            lines={[
-              ...diff!.removals.map((content) => ({ type: "remove" as const, content })),
-              ...diff!.additions.map((content) => ({ type: "add" as const, content })),
-            ]}
-          />
+        <Box flexDirection="column" marginLeft={4}>
+          {diff!.removals.map((line, i) => (
+            <Text key={`r${i}`} color={RED} dimColor>
+              {"- "}
+              {line}
+            </Text>
+          ))}
+          {diff!.additions.map((line, i) => (
+            <Text key={`a${i}`} color={GREEN} dimColor>
+              {"+ "}
+              {line}
+            </Text>
+          ))}
         </Box>
       )}
     </Box>
