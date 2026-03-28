@@ -93,59 +93,76 @@ export function ChatView() {
     const turnId = crypto.randomUUID();
     const turnToolCalls: ToolCallItem[] = [];
 
-    await chat({
-      messages: getMessages(updated),
-      system: getSystemPrompt(cwd),
-      onChunk: (chunk) => setCurrentChunk((prev) => prev + chunk),
-      onToolCall: (tool, args) => {
-        // For full-content writes, capture the existing file so we can show removals
-        let enrichedArgs = args;
-        const WRITE_TOOLS = new Set(["write_file", "write", "create_file", "create", "overwrite_file"]);
-        if (WRITE_TOOLS.has(tool) && typeof args === "object" && args) {
-          const a = args as Record<string, unknown>;
-          const filePath = String(a.path ?? a.file_path ?? a.filename ?? "");
-          if (filePath) {
-            const abs = join(cwd, filePath);
-            try {
-              enrichedArgs = { ...a, _prevContent: readFileSync(abs, "utf-8") };
-            } catch { /* file doesn't exist yet */ }
+    try {
+      await chat({
+        messages: getMessages(updated),
+        system: getSystemPrompt(cwd),
+        onChunk: (chunk) => setCurrentChunk((prev) => prev + chunk),
+        onToolCall: (tool, args) => {
+          // For full-content writes, capture the existing file so we can show removals
+          let enrichedArgs = args;
+          const WRITE_TOOLS = new Set(["write_file", "write", "create_file", "create", "overwrite_file"]);
+          if (WRITE_TOOLS.has(tool) && typeof args === "object" && args) {
+            const a = args as Record<string, unknown>;
+            const filePath = String(a.path ?? a.file_path ?? a.filename ?? "");
+            if (filePath) {
+              const abs = join(cwd, filePath);
+              try {
+                enrichedArgs = { ...a, _prevContent: readFileSync(abs, "utf-8") };
+              } catch { /* file doesn't exist yet */ }
+            }
           }
-        }
 
-        const id = crypto.randomUUID();
-        const item: ToolCallItem = { id, tool, args: enrichedArgs, status: "running" };
-        turnToolCalls.push(item);
-        setLiveToolCalls((prev) => [...prev, item]);
-        setTimeout(() => {
-          const idx = turnToolCalls.findIndex((tc) => tc.id === id);
-          if (idx !== -1)
-            turnToolCalls[idx] = { ...turnToolCalls[idx]!, status: "done" };
-          setLiveToolCalls((prev) =>
-            prev.map((tc) => (tc.id === id ? { ...tc, status: "done" } : tc)),
-          );
-        }, 500);
-      },
-      onFinish: (text) => {
-        setSession((prev) => {
-          const final = addMessage(prev, "assistant", text);
-          saveSession(final);
-          return final;
-        });
-        setTurns((prev) => [
-          ...prev,
-          {
-            id: turnId,
-            userText: val,
-            toolCalls: turnToolCalls.map((tc) => ({ ...tc, status: "done" })),
-            assistantText: text,
-          },
-        ]);
-        setCurrentUserText("");
-        setCurrentChunk("");
-        setIsLoading(false);
-        setLiveToolCalls([]);
-      },
-    });
+          const id = crypto.randomUUID();
+          const item: ToolCallItem = { id, tool, args: enrichedArgs, status: "running" };
+          turnToolCalls.push(item);
+          setLiveToolCalls((prev) => [...prev, item]);
+          setTimeout(() => {
+            const idx = turnToolCalls.findIndex((tc) => tc.id === id);
+            if (idx !== -1)
+              turnToolCalls[idx] = { ...turnToolCalls[idx]!, status: "done" };
+            setLiveToolCalls((prev) =>
+              prev.map((tc) => (tc.id === id ? { ...tc, status: "done" } : tc)),
+            );
+          }, 500);
+        },
+        onFinish: (text) => {
+          setSession((prev) => {
+            const final = addMessage(prev, "assistant", text);
+            saveSession(final);
+            return final;
+          });
+          setTurns((prev) => [
+            ...prev,
+            {
+              id: turnId,
+              userText: val,
+              toolCalls: turnToolCalls.map((tc) => ({ ...tc, status: "done" })),
+              assistantText: text,
+            },
+          ]);
+          setCurrentUserText("");
+          setCurrentChunk("");
+          setIsLoading(false);
+          setLiveToolCalls([]);
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: turnId,
+          userText: val,
+          toolCalls: turnToolCalls.map((tc) => ({ ...tc, status: "done" })),
+          assistantText: `Error: ${message}`,
+        },
+      ]);
+      setCurrentUserText("");
+      setCurrentChunk("");
+      setIsLoading(false);
+      setLiveToolCalls([]);
+    }
   };
 
   return (
