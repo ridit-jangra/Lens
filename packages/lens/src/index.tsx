@@ -2,6 +2,8 @@ import React from "react";
 import { render } from "ink";
 import { Command } from "commander";
 import { ChatCommand } from "./commands/chat";
+import { TimelineCommand } from "./commands/timeline";
+import { RepoCommand } from "./commands/repo";
 
 const program = new Command();
 
@@ -70,12 +72,7 @@ program
   .command("repo <url>")
   .description("Analyze a remote repository")
   .action((url: string) => {
-    render(
-      <ChatCommand
-        path="."
-        initialMessage={`I want to analyze the repository at ${url}. Please fetch and explore it, then give me an overview of what it does, the tech stack, and key architectural decisions.`}
-      />,
-    );
+    render(<RepoCommand url={url} />);
   });
 
 program
@@ -85,12 +82,7 @@ program
   )
   .option("-p, --path <path>", "Path to the repo", ".")
   .action((opts: { path: string }) => {
-    render(
-      <ChatCommand
-        path={opts.path}
-        initialMessage="Show me the recent commit history for this repo. Summarize what changed in each commit and highlight any important trends or patterns."
-      />,
-    );
+    render(<TimelineCommand path={opts.path} />);
   });
 
 program
