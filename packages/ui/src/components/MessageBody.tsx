@@ -48,6 +48,60 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   );
 }
 
+function TableView({ rows }: { rows: string[][] }) {
+  const colCount = Math.max(...rows.map((r) => r.length));
+  const colWidths = Array.from({ length: colCount }, (_, ci) =>
+    Math.max(...rows.map((r) => (r[ci] ?? "").length), 1),
+  );
+  return (
+    <Box flexDirection="column">
+      {rows.map((row, ri) => (
+        <Box key={ri}>
+          {Array.from({ length: colCount }, (_, ci) => {
+            const cell = (row[ci] ?? "").padEnd(colWidths[ci]!);
+            return (
+              <Text key={ci} color={ri === 0 ? "white" : "gray"} bold={ri === 0}>
+                {ci > 0 ? "  " : ""}{cell}
+              </Text>
+            );
+          })}
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+type Block =
+  | { type: "line"; line: string }
+  | { type: "table"; rows: string[][] };
+
+function groupLines(lines: string[]): Block[] {
+  const blocks: Block[] = [];
+  let tableBuffer: string[] = [];
+
+  const flushTable = () => {
+    if (tableBuffer.length === 0) return;
+    const rows = tableBuffer
+      .filter((l) => !/^\|[\s\-:|]+\|$/.test(l.trim()))
+      .map((l) =>
+        l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()),
+      );
+    if (rows.length > 0) blocks.push({ type: "table", rows });
+    tableBuffer = [];
+  };
+
+  for (const line of lines) {
+    if (line.trim().startsWith("|")) {
+      tableBuffer.push(line);
+    } else {
+      flushTable();
+      blocks.push({ type: "line", line });
+    }
+  }
+  flushTable();
+  return blocks;
+}
+
 export function MessageBody({ content }: { content: string }) {
   const segments = content.split(/(```[\s\S]*?```)/g);
   return (
@@ -63,39 +117,39 @@ export function MessageBody({ content }: { content: string }) {
             .trimEnd();
           return <CodeBlock key={si} lang={lang} code={code} />;
         }
-        const lines = seg.split("\n").filter((l) => l.trim() !== "");
-        if (lines.length === 0) return null;
+        const rawLines = seg.split("\n").filter((l) => l.trim() !== "");
+        if (rawLines.length === 0) return null;
+        const blocks = groupLines(rawLines);
         return (
           <Box key={si} flexDirection="column">
-            {lines.map((line, li) => {
+            {blocks.map((block, bi) => {
+              if (block.type === "table")
+                return <TableView key={bi} rows={block.rows} />;
+              const { line } = block;
               if (line.match(/^#{1,3}\s/))
                 return (
-                  <Box key={li}>
+                  <Box key={bi}>
                     <Text bold>{line.replace(/^#+\s/, "")}</Text>
                   </Box>
                 );
               if (line.match(/^[-*•]\s/))
                 return (
-                  <Box key={li} gap={1}>
-                    <Text color={ACCENT} dimColor>
-                      ·
-                    </Text>
+                  <Box key={bi} gap={1}>
+                    <Text color={ACCENT} dimColor>·</Text>
                     <InlineText text={line.slice(2).trim()} />
                   </Box>
                 );
               if (line.match(/^\d+\.\s/)) {
                 const num = line.match(/^(\d+)\.\s/)![1];
                 return (
-                  <Box key={li} gap={1}>
-                    <Text color="gray" dimColor>
-                      {num}.
-                    </Text>
+                  <Box key={bi} gap={1}>
+                    <Text color="gray" dimColor>{num}.</Text>
                     <InlineText text={line.replace(/^\d+\.\s/, "").trim()} />
                   </Box>
                 );
               }
               return (
-                <Box key={li}>
+                <Box key={bi}>
                   <InlineText text={line} />
                 </Box>
               );
