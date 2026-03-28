@@ -7,18 +7,21 @@ const TMP_HOME = join(import.meta.dir, "__config_home__");
 const TMP_CONFIG_DIR = join(TMP_HOME, ".lens");
 const TMP_CONFIG_PATH = join(TMP_CONFIG_DIR, "config.json");
 
-// Patch homedir before importing the config module
-import { homedir as _realHomedir } from "os";
-const _orig = process.env.HOME;
+// Patch homedir before importing the config module.
+// On Windows homedir() reads USERPROFILE (not HOME), so we must patch both.
+const _origHome = process.env.HOME;
+const _origUserProfile = process.env.USERPROFILE;
 
 beforeAll(() => {
   mkdirSync(TMP_CONFIG_DIR, { recursive: true });
   process.env.HOME = TMP_HOME;
+  process.env.USERPROFILE = TMP_HOME;
 });
 
 afterAll(() => {
   rmSync(TMP_HOME, { recursive: true, force: true });
-  if (_orig !== undefined) process.env.HOME = _orig;
+  if (_origHome !== undefined) process.env.HOME = _origHome; else delete process.env.HOME;
+  if (_origUserProfile !== undefined) process.env.USERPROFILE = _origUserProfile; else delete process.env.USERPROFILE;
 });
 
 // Dynamic imports so HOME is patched before the module reads it
