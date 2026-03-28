@@ -46,7 +46,7 @@ describe("write tool", () => {
   it("creates a new file with content", async () => {
     const file = join(TMP, "written.txt");
     const result = await write.execute({ path: file, content: "new content" }, {} as never);
-    expect(result).toContain("successfully wrote");
+    expect((result as { ok: boolean }).ok).toBe(true);
 
     const { readFileSync } = await import("fs");
     expect(readFileSync(file, "utf-8")).toBe("new content");
@@ -61,9 +61,9 @@ describe("write tool", () => {
     expect(readFileSync(file, "utf-8")).toBe("new content");
   });
 
-  it("returns error message when write fails", async () => {
+  it("returns error when write fails", async () => {
     const result = await write.execute({ path: "/nonexistent/deep/path/file.txt", content: "x" }, {} as never);
-    expect(result).toContain("error writing");
+    expect((result as { ok: boolean }).ok).toBe(false);
   });
 });
 

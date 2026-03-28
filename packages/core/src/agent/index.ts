@@ -2,6 +2,7 @@ import { streamText } from "ai";
 import type { CoreMessage } from "ai";
 import { createProvider } from "../providers";
 import { getActiveModelName } from "../providers";
+import { getActiveProvider } from "../config";
 import { tools } from "../tools";
 
 interface AgentOptions {
@@ -35,12 +36,16 @@ export async function chat(options: AgentOptions) {
   // accumulate all response messages across steps (tool calls + final text)
   const responseMessages: CoreMessage[] = [];
 
+  const providerSettings = (() => { try { return getActiveProvider(); } catch { return null; } })();
+
   const result = streamText({
     model: createProvider(),
     tools: activeTools as typeof tools,
     messages: options.messages,
     system: options.system,
     maxSteps: options.maxSteps ?? 50,
+    ...(providerSettings?.maxTokens !== undefined && { maxTokens: providerSettings.maxTokens }),
+    ...(providerSettings?.temperature !== undefined && { temperature: providerSettings.temperature }),
     onStepFinish: (step) => {
       responseMessages.push(...(step.response.messages as CoreMessage[]));
       for (const toolResult of step.toolResults) {

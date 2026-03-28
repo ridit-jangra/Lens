@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g. 1.0.0)"
+        required: false
+
+jobs:
+  build-windows:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun test
+
+      - name: Build CLI binary (exe)
+        working-directory: packages/lens
+        run: bun build src/index.tsx --compile --target bun-windows-x64 --outfile dist/lens.exe
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$(node -p "require('./packages/lens/package.json').version")" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Inno Setup version
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $content = Get-Content scripts/installer.iss -Raw
+          $content = $content -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`""
+          Set-Content scripts/installer.iss $content
+
+      - name: Build installer with Inno Setup
+        run: iscc scripts\installer.iss
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lens-setup-${{ steps.version.outputs.version }}
+          path: dist/installer/lens-setup-*.exe
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/installer/lens-setup-*.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
