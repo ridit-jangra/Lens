@@ -7,7 +7,6 @@ interface CommandContext {
   forceApprove: boolean;
   setAutoApprove: (v: boolean) => void;
   setForceApprove: (v: boolean) => void;
-  setShowForceWarning: (v: boolean) => void;
   pushMsg: (msg: UIMessage) => void;
   resetSession: () => void;
 }
@@ -25,7 +24,14 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
         content: "Force-all mode OFF — tools will ask for permission again.",
       });
     } else {
-      ctx.setShowForceWarning(true);
+      ctx.setForceApprove(true);
+      ctx.setAutoApprove(true);
+      ctx.pushMsg({
+        role: "assistant",
+        type: "text",
+        content:
+          "⚡⚡ Force-all mode ON (dangerous) — ALL tools auto-approved including shell and writes. Type /auto --force-all again to disable.",
+      });
     }
     return true;
   }

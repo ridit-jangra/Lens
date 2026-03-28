@@ -8,7 +8,7 @@ export interface ProviderSettings {
   baseURL?: string;
 }
 
-export type Provider = "anthropic" | "openai" | "google" | "groq";
+export type Provider = "anthropic" | "openai" | "google" | "groq" | "openrouter";
 
 export interface Config {
   activeProvider: Provider;

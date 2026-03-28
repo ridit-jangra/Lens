@@ -4,6 +4,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGroq } from "@ai-sdk/groq";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 // default models per provider:
 // anthropic → claude-sonnet-4-5
@@ -16,12 +17,14 @@ const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4.5";
 const DEFAULT_OPENAI_MODEL = "gpt-4o";
 const DEFAULT_GOOGLE_MODEL = "gemini-2.0-flash";
 const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
+const DEFAULT_OPENROUTER_MODEL = "openai/gpt-oss-120b:free";
 
 const DEFAULT_MODELS: Record<string, string> = {
   anthropic: DEFAULT_ANTHROPIC_MODEL,
   openai: DEFAULT_OPENAI_MODEL,
   google: DEFAULT_GOOGLE_MODEL,
   groq: DEFAULT_GROQ_MODEL,
+  openrouter: DEFAULT_OPENROUTER_MODEL,
 };
 
 export function getActiveModelName(): string {
@@ -62,6 +65,15 @@ export function createProvider(): LanguageModel {
         baseURL: activeProvider.baseURL,
       });
       return groq(activeProvider.model ?? DEFAULT_GROQ_MODEL);
+    }
+    case "openrouter": {
+      const openrouter = createOpenAI({
+        apiKey: activeProvider.apiKey,
+        baseURL:
+          activeProvider.baseURL ??
+          "https://openrouter.ai/api/v1/chat/completions",
+      });
+      return openrouter(activeProvider.model ?? DEFAULT_GROQ_MODEL);
     }
   }
 }

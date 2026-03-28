@@ -5,7 +5,6 @@ import { AppHeader, InputBox, ShortcutBar, TypewriterText } from "./StatusBar";
 import { StaticMessage } from "./Message";
 import { MessageBody } from "@ridit/ink-ui";
 import type { UIMessage } from "./Message";
-import { TextArea } from "./TextArea";
 import {
   useThinkingPhrase,
   useThinkingTip,
@@ -113,61 +112,6 @@ function CommandPalette({ query }: { query: string }) {
   );
 }
 
-// ── Force-all warning ─────────────────────────────────────────────────────────
-
-function ForceAllWarning({
-  onConfirm,
-}: {
-  onConfirm: (confirmed: boolean) => void;
-}) {
-  const [input, setInput] = useState("");
-  return (
-    <Box flexDirection="column" marginY={1} gap={1}>
-      <Box gap={1}>
-        <Text color="red" bold>
-          ⚠ WARNING
-        </Text>
-      </Box>
-      <Box flexDirection="column" marginLeft={2} gap={1}>
-        <Text color="yellow">
-          Force-all mode auto-approves EVERY tool without asking — including:
-        </Text>
-        <Text color="red" dimColor>
-          {" "}
-          · shell commands (rm, git, npm, anything)
-        </Text>
-        <Text color="red" dimColor>
-          {" "}
-          · file writes and deletes
-        </Text>
-        <Text color="yellow" dimColor>
-          The AI can modify or delete files without any confirmation.
-        </Text>
-        <Text color="yellow" dimColor>
-          Only use this in throwaway environments or when you fully trust the
-          task.
-        </Text>
-      </Box>
-      <Box gap={1} marginTop={1}>
-        <Text color="gray">Type </Text>
-        <Text color="white" bold>
-          yes
-        </Text>
-        <Text color="gray"> to enable, or press </Text>
-        <Text color="white" bold>
-          esc
-        </Text>
-        <Text color="gray"> to cancel: </Text>
-        <TextArea
-          value={input}
-          onChange={setInput}
-          onSubmit={(v) => onConfirm(v.trim().toLowerCase() === "yes")}
-          placeholder="yes / esc to cancel"
-        />
-      </Box>
-    </Box>
-  );
-}
 
 // ── Main runner ───────────────────────────────────────────────────────────────
 
@@ -192,7 +136,6 @@ export function ChatRunner({
   const [autoApprove, setAutoApprove] = useState(autoForce);
   const [forceApprove, setForceApprove] = useState(autoForce);
   const forceApproveRef = useRef(autoForce);
-  const [showForceWarning, setShowForceWarning] = useState(false);
   const [approvalRequest, setApprovalRequest] = useState<{
     tool: string;
     args: unknown;
@@ -252,7 +195,7 @@ export function ChatRunner({
       return;
     }
 
-    if (key.ctrl && input === "f" && stage === "idle" && !showForceWarning) {
+    if (key.ctrl && input === "f" && stage === "idle") {
       if (forceApprove) {
         forceApproveRef.current = false;
         setForceApprove(false);
@@ -263,13 +206,16 @@ export function ChatRunner({
           content: "Force-all mode OFF — tools will ask for permission again.",
         });
       } else {
-        setShowForceWarning(true);
+        forceApproveRef.current = true;
+        setForceApprove(true);
+        setAutoApprove(true);
+        pushMsg({
+          role: "assistant",
+          type: "text",
+          content:
+            "⚡⚡ Force-all mode ON (dangerous) — ALL tools auto-approved including shell and writes. Type /auto --force-all again to disable.",
+        });
       }
-      return;
-    }
-
-    if (showForceWarning && key.escape) {
-      setShowForceWarning(false);
       return;
     }
 
@@ -281,7 +227,7 @@ export function ChatRunner({
       return;
     }
 
-    if (stage === "idle" && !showForceWarning) {
+    if (stage === "idle") {
       if (key.upArrow) {
         historyUp();
         return;
@@ -315,7 +261,6 @@ export function ChatRunner({
           forceApprove,
           setAutoApprove,
           setForceApprove,
-          setShowForceWarning,
           pushMsg,
           resetSession: () => {
             sessionRef.current = createSession(repoPath);
@@ -485,32 +430,7 @@ export function ChatRunner({
         {(msg, i) => <StaticMessage key={i} msg={msg} />}
       </Static>
 
-      {showForceWarning && (
-        <ForceAllWarning
-          onConfirm={(confirmed) => {
-            setShowForceWarning(false);
-            if (confirmed) {
-              forceApproveRef.current = true;
-              setForceApprove(true);
-              setAutoApprove(true);
-              pushMsg({
-                role: "assistant",
-                type: "text",
-                content:
-                  "⚡⚡ Force-all mode ON — ALL tools auto-approved including shell and writes. Type /auto --force-all again to disable.",
-              });
-            } else {
-              pushMsg({
-                role: "assistant",
-                type: "text",
-                content: "Force-all cancelled.",
-              });
-            }
-          }}
-        />
-      )}
-
-      {!showForceWarning && stage === "thinking" && (
+      {stage === "thinking" && (
         <Box flexDirection="column">
           {currentChunk ? (
             <Box gap={1}>
@@ -552,7 +472,7 @@ export function ChatRunner({
         </Box>
       )}
 
-      {!showForceWarning && stage === "idle" && (
+      {stage === "idle" && (
         <Box flexDirection="column">
           {inputValue.startsWith("/") && <CommandPalette query={inputValue} />}
           <InputBox
@@ -567,14 +487,12 @@ export function ChatRunner({
         </Box>
       )}
 
-      {!showForceWarning && (
-        <ShortcutBar
-          autoApprove={autoApprove}
-          forceApprove={forceApprove}
-          isThinking={isThinking}
-          model={getActiveModelName()}
-        />
-      )}
+      <ShortcutBar
+        autoApprove={autoApprove}
+        forceApprove={forceApprove}
+        isThinking={isThinking}
+        model={getActiveModelName()}
+      />
     </Box>
   );
 }
