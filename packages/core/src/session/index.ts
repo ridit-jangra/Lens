@@ -9,8 +9,17 @@ export interface Session {
 
 export function createSession(cwd: string): Session {
   return {
-    cwd: cwd,
+    cwd,
     id: crypto.randomUUID(),
+    createdAt: new Date(),
+    messages: [],
+  };
+}
+
+export function createSessionWithId(id: string, cwd: string): Session {
+  return {
+    cwd,
+    id,
     createdAt: new Date(),
     messages: [],
   };
@@ -22,6 +31,12 @@ export function addMessage(
   content: string,
 ): Session {
   return { ...session, messages: [...session.messages, { content, role }] };
+}
+
+// Appends the full response messages from a chat turn (includes tool calls/results).
+// Use this instead of addMessage for assistant turns to preserve tool context.
+export function appendMessages(session: Session, messages: CoreMessage[]): Session {
+  return { ...session, messages: [...session.messages, ...messages] };
 }
 
 export function getMessages(session: Session): CoreMessage[] {

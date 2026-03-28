@@ -2,7 +2,7 @@
 export { chat } from "./agent";
 
 // session
-export { createSession, addMessage, getMessages } from "./session";
+export { createSession, createSessionWithId, addMessage, appendMessages, getMessages } from "./session";
 export type { Session } from "./session";
 
 // memory
@@ -23,6 +23,8 @@ export {
   getActiveProvider,
   setActiveProvider,
   addProvider,
+  removeProvider,
+  getConfiguredProviders,
 } from "./config";
 export type { Config, Provider, ProviderSettings } from "./config";
 

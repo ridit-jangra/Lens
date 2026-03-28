@@ -7,17 +7,20 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 // default models per provider:
-// anthropic → claude-sonnet-4-5
-// openai    → gpt-4o
-// google    → gemini-2.0-flash
-// groq      → openai/gpt-oss-120b
-// custom    → whatever model is in activeProvider
+// anthropic  → claude-sonnet-4.5
+// openai     → gpt-4o
+// google     → gemini-2.0-flash
+// groq       → llama-3.3-70b-versatile
+// openrouter → openai/gpt-4o-mini:free
+// ollama     → llama3.2
+// custom     → gpt-4o (uses whatever model is configured)
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4.5";
 const DEFAULT_OPENAI_MODEL = "gpt-4o";
 const DEFAULT_GOOGLE_MODEL = "gemini-2.0-flash";
-const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
-const DEFAULT_OPENROUTER_MODEL = "openai/gpt-oss-120b:free";
+const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
+const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini:free";
+const DEFAULT_OLLAMA_MODEL = "llama3.2";
 
 const DEFAULT_MODELS: Record<string, string> = {
   anthropic: DEFAULT_ANTHROPIC_MODEL,
@@ -25,6 +28,7 @@ const DEFAULT_MODELS: Record<string, string> = {
   google: DEFAULT_GOOGLE_MODEL,
   groq: DEFAULT_GROQ_MODEL,
   openrouter: DEFAULT_OPENROUTER_MODEL,
+  ollama: DEFAULT_OLLAMA_MODEL,
 };
 
 export function getActiveModelName(): string {
@@ -69,11 +73,23 @@ export function createProvider(): LanguageModel {
     case "openrouter": {
       const openrouter = createOpenAI({
         apiKey: activeProvider.apiKey,
-        baseURL:
-          activeProvider.baseURL ??
-          "https://openrouter.ai/api/v1/chat/completions",
+        baseURL: activeProvider.baseURL ?? "https://openrouter.ai/api/v1",
       });
-      return openrouter(activeProvider.model ?? DEFAULT_GROQ_MODEL);
+      return openrouter(activeProvider.model ?? DEFAULT_OPENROUTER_MODEL);
+    }
+    case "ollama": {
+      const ollama = createOpenAI({
+        apiKey: "ollama",
+        baseURL: activeProvider.baseURL ?? "http://localhost:11434/v1",
+      });
+      return ollama(activeProvider.model ?? DEFAULT_OLLAMA_MODEL);
+    }
+    case "custom": {
+      const custom = createOpenAI({
+        apiKey: activeProvider.apiKey,
+        baseURL: activeProvider.baseURL,
+      });
+      return custom(activeProvider.model ?? DEFAULT_OPENAI_MODEL);
     }
   }
 }
