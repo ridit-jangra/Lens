@@ -3,7 +3,6 @@ import { Box, Text, Static, useInput } from "ink";
 import { ACCENT, GREEN, RED } from "../../colors";
 import { AppHeader, InputBox, ShortcutBar, TypewriterText } from "./StatusBar";
 import { StaticMessage } from "./Message";
-import { MessageBody } from "@ridit/ink-ui";
 import type { UIMessage } from "./Message";
 import { ProviderSetup } from "../provider/ProviderSetup";
 import {
@@ -455,7 +454,7 @@ export function ChatRunner({
           {currentChunk ? (
             <Box gap={1}>
               <Text color={ACCENT}>●</Text>
-              <MessageBody content={currentChunk} />
+              <Text wrap="wrap">{currentChunk}</Text>
             </Box>
           ) : (
             <>
