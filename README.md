@@ -1,84 +1,87 @@
 # Lens
 
-A terminal-based AI coding assistant that helps you understand and work with your codebase — directly from the CLI.
-
-```
-◆ lens
-✓ LENS.md loaded
-
- you list all files here
-  ✓ Listed .
-◆ Here are the files in the current directory:
-  * main.py - Python main file
-  * README.md - Documentation
-```
+Lens is an AI-powered CLI tool that lets you explore, understand, and modify any codebase through natural language. Built with React and Ink for a rich terminal UI, Lens connects to multiple LLM providers and gives the AI direct access to your filesystem, shell, and the web.
 
 ## Features
 
-- **Conversational codebase exploration** — ask questions, list files, search patterns, run commands
-- **Persistent session history** — conversations are saved per project and restored on next run
-- **Turn-based display** — tool calls are grouped with the message that triggered them and persist on screen
-- **File diffs** — write and edit operations show full before/after diffs inline
-- **LENS.md context** — run `/init` to generate a codebase summary that gets injected into every prompt
-- **Multi-provider** — supports Groq, Anthropic, OpenAI, and Google
+- **Chat with your codebase** — ask questions, request changes, scaffold new files
+- **Multi-provider support** — Anthropic, OpenAI, Gemini, Ollama, or any OpenAI-compatible API
+- **Tool system** — AI can read/write files, run shell commands, fetch URLs, search the web, clone repos, generate PDFs, and more
+- **Plugin registry** — extend Lens with custom tools via `@ridit/lens-sdk`
+- **Diff preview** — proposed code changes are shown as a diff before applying
+- **Auto-approve mode** — `/auto` skips confirmation for safe read/search tools
+- **Force-all mode** — `/auto --force-all` approves everything including shell and writes
+- **Persistent memory** — Lens remembers project-specific context across sessions
+- **Chat history** — save, load, rename, and delete chat sessions per repo
+- **Smart commits** — generate conventional commit messages from staged changes
+- **Timeline** — browse and explore commit history
+- **Repo analysis** — deep codebase review from a remote URL or local path
 
-## Packages
+## Installation
 
-| Package | Description |
-|---|---|
-| `packages/lens` | CLI entry point and UI (Ink/React) |
-| `packages/core` | Agent, session, memory, tools, providers |
-| `packages/ui` | Shared Ink components (InputBox, MessageBody, Diff, etc.) |
-| `packages/sdk` | Lens SDK for programmatic use |
+```bash
+# using bun
+bun add @ridit/lens -g
 
-## Getting Started
-
-```sh
-# Install dependencies
-bun install
-
-# Configure a provider (e.g. Groq)
-bun lens config set-provider groq --api-key YOUR_KEY
-
-# Run in any project directory
-cd your-project
-bun lens
+# using npm
+npm install -g @ridit/lens
 ```
 
-## Commands
+## CLI Commands
 
-| Command | Description |
-|---|---|
-| `/init` | Analyze the codebase and generate `LENS.md` |
-| `/memory` | Show what Lens knows about this project |
-| `/clear` | Clear the current session |
+```
+lens chat                               chat with your codebase
+lens chat -p /path/to/repo              chat in a specific repo
 
-## Keyboard Shortcuts
+lens review                             AI review of the current directory
+lens review /path/to/repo               AI review of a specific repo
 
-| Key | Action |
-|---|---|
-| `Enter` | Send message |
-| `Shift+Enter` | New line |
-| `Ctrl+←/→` | Move by word |
-| `Esc` | Interrupt response |
-| `Ctrl+C` | Quit |
+lens repo <url>                         analyze a remote GitHub repository
 
-## Development
+lens task <text>                        apply a natural language change to the codebase
+lens task <text> -p /path               apply change to a specific repo
 
-```sh
-# Run the CLI directly
-bun packages/lens/src/index.tsx
+lens commit                             generate a smart commit message from staged changes
+lens commit [files...]                  stage specific files and generate a commit message
+lens commit --auto                      stage all changes and commit without confirmation
+lens commit --confirm                   show preview before committing when using --auto
+lens commit --preview                   show the generated message without committing
+lens commit  --push                     push to remote after committing
 
-# Build all packages
-bun run build
+lens timeline                           explore commit history
+lens timeline -p /path                  explore history of a specific repo
 
-# Type check
-bun run check-types
+lens run                                Run your dev server. Lens detects and fixes errors automatically
+
+lens provider                           configure AI providers
 ```
 
-## Stack
+## Chat Commands
 
-- [Bun](https://bun.sh) — runtime and package manager
-- [Ink](https://github.com/vadimdemedes/ink) — React for CLIs
-- [Turborepo](https://turbo.build) — monorepo build system
-- [TypeScript](https://www.typescriptlang.org)
+Once inside a `lens chat` session, use slash commands:
+
+```
+/auto                  toggle auto-approve for safe tools (read, search, fetch)
+/auto --force-all      auto-approve ALL tools including shell and writes ⚠️
+/memory list           list stored memories for this repo
+/memory add <text>     add a memory
+/memory delete <id>    delete a memory by ID
+/memory clear          clear all memories for this repo
+/clear history         wipe session memory for this repo
+```
+
+## Supported Providers
+
+- **Anthropic** — Claude models
+- **OpenAI** — GPT models
+- **Gemini** — Google Gemini models
+- **Ollama** — local models (free, fully offline)
+- **Custom** — any OpenAI-compatible API endpoint
+
+## Extending Lens
+
+Custom tools can be built and registered using `[@ridit/lens-sdk](https://www.npmjs.com/package/@ridit/lens-sdk)`.
+
+## License
+
+MIT
