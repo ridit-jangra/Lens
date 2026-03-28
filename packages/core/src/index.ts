@@ -30,4 +30,4 @@ export type { Config, Provider, ProviderSettings } from "./config";
 export { tools, read, write, bash, grep, ls, remember } from "./tools";
 
 // providers
-export { createProvider } from "./providers";
+export { createProvider, getActiveModelName } from "./providers";

@@ -14,7 +14,7 @@ export const ls = tool({
       return entries
         .map((entry) => {
           const isDir = statSync(join(path, entry)).isDirectory();
-          return `${isDir ? "📁" : "📄"} ${entry}`;
+          return `${isDir ? "🗀" : "☰"} ${entry}`;
         })
         .join("\n");
     } catch {
