@@ -1,9 +1,9 @@
 import React, { useState, useRef } from "react";
 import { Box, Text, Static, useInput } from "ink";
 import { ACCENT, RED, GREEN } from "../../colors";
-import { InputBox, ShortcutBar, TypewriterText } from "./ChatOverlays";
-import { StaticMessage, MessageBody } from "./ChatMessage";
-import type { UIMessage } from "./ChatMessage";
+import { InputBox, ShortcutBar, TypewriterText } from "./StatusBar";
+import { StaticMessage, MessageBody } from "./Message";
+import type { UIMessage } from "./Message";
 import { TextArea } from "./TextArea";
 import {
   useThinkingPhrase,
@@ -471,24 +471,32 @@ export function ChatRunner({
 
       {!showForceWarning && stage === "thinking" && (
         <Box flexDirection="column">
-          <Box gap={1}>
-            <Text color={ACCENT}>●</Text>
-            <TypewriterText text={thinkingPhrase} />
-            <Text color="gray" dimColor>
-              {thinkingTimer ? `· ${thinkingTimer} ` : ""}· esc cancel
-            </Text>
-          </Box>
-          <Box marginLeft={2}>
-            <Text color="gray" dimColor>
-              tip: {thinkingTip}
-            </Text>
-          </Box>
           {currentChunk ? (
-            <Box gap={1} marginTop={1}>
+            <Box gap={1}>
               <Text color={ACCENT}>●</Text>
-              <MessageBody content={currentChunk} />
+              <Box flexDirection="column">
+                <MessageBody content={currentChunk} />
+                <Text color="gray" dimColor>
+                  {thinkingTimer ? `${thinkingTimer} · ` : ""}esc cancel
+                </Text>
+              </Box>
             </Box>
-          ) : null}
+          ) : (
+            <>
+              <Box gap={1}>
+                <Text color={ACCENT}>●</Text>
+                <TypewriterText text={thinkingPhrase} />
+                <Text color="gray" dimColor>
+                  {thinkingTimer ? `· ${thinkingTimer} ` : ""}· esc cancel
+                </Text>
+              </Box>
+              <Box marginLeft={2}>
+                <Text color="gray" dimColor>
+                  tip: {thinkingTip}
+                </Text>
+              </Box>
+            </>
+          )}
         </Box>
       )}
 

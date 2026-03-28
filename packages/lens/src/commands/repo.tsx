@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, useInput } from "ink";
 import { StepRow, type Step } from "../components/repo/StepRow";
-import { ChatRunner } from "../components/chat/ChatRunner";
+import { ChatRunner } from "../components/chat/ChatView";
 import { startCloneRepo } from "../utils/repo";
 
 export function RepoCommand({ url }: { url: string }) {

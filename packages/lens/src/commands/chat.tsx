@@ -1,6 +1,6 @@
 import React from "react";
 import { Box } from "ink";
-import { ChatRunner } from "../components/chat/ChatRunner";
+import { ChatRunner } from "../components/chat/ChatView";
 
 export function ChatCommand({
   path,

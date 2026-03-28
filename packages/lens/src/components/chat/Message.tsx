@@ -61,11 +61,15 @@ function InlineText({ text }: { text: string }) {
 
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" marginY={0}>
+      {lang ? (
+        <Text color="gray" dimColor>
+          {"  "}{lang}
+        </Text>
+      ) : null}
       {code.split("\n").map((line, i) => (
         <Text key={i} color={ACCENT}>
-          {"  "}
-          {line}
+          {"  "}{line}
         </Text>
       ))}
     </Box>
@@ -99,7 +103,7 @@ export function MessageBody({ content }: { content: string }) {
               if (line.match(/^#{1,3}\s/)) {
                 return (
                   <Box key={li}>
-                    <Text bold color="white">
+                    <Text bold color={ACCENT}>
                       {line.replace(/^#+\s/, "")}
                     </Text>
                   </Box>
@@ -140,13 +144,8 @@ export function MessageBody({ content }: { content: string }) {
 export function StaticMessage({ msg }: { msg: UIMessage }) {
   if (msg.role === "user") {
     return (
-      <Box
-        marginBottom={1}
-        gap={1}
-        paddingLeft={1}
-        paddingRight={2}
-      >
-        <Text color="gray">{">"}</Text>
+      <Box marginBottom={1} gap={1}>
+        <Text color={ACCENT}>{">"}</Text>
         <Text color="white" bold>
           {msg.content}
         </Text>
@@ -166,8 +165,9 @@ export function StaticMessage({ msg }: { msg: UIMessage }) {
           {!msg.approved && <Text color={RED}>denied</Text>}
         </Box>
         {msg.approved && msg.result && (
-          <Box marginLeft={2}>
-            <Text color="gray">
+          <Box gap={1} marginLeft={2}>
+            <Text color="gray" dimColor>{"└"}</Text>
+            <Text color="gray" dimColor>
               {msg.result.split("\n")[0]?.slice(0, 120)}
               {(msg.result.split("\n")[0]?.length ?? 0) > 120 ? "…" : ""}
             </Text>

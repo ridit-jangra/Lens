@@ -61,17 +61,15 @@ export function ShortcutBar({
   forceApprove?: boolean;
 }) {
   return (
-    <Box gap={3} marginTop={0}>
+    <Box gap={2} marginTop={0}>
       <Text color="gray" dimColor>
-        enter send · ctrl+enter newline · ctrl+del del word · ^f force · ^c exit
+        enter ↵ · ^↵ newline · ^⌫ del word · ^f force · ^c exit
       </Text>
       {forceApprove ? (
-        <Text color={RED}>⚡⚡ force-all</Text>
-      ) : (
-        <Text color={autoApprove ? GREEN : "gray"} dimColor={!autoApprove}>
-          {autoApprove ? "⚡ auto" : "/auto"}
-        </Text>
-      )}
+        <Text color={RED} bold>force-all</Text>
+      ) : autoApprove ? (
+        <Text color={GREEN}>auto</Text>
+      ) : null}
     </Box>
   );
 }
