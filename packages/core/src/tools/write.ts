@@ -1,5 +1,5 @@
 import { tool } from "ai";
-import { writeFileSync } from "fs";
+import { writeFileSync, readFileSync, existsSync } from "fs";
 import { z } from "zod";
 
 export const write = tool({
@@ -9,11 +9,14 @@ export const write = tool({
     content: z.string().describe("content to write"),
   }),
   execute: async ({ path, content }) => {
+    const prevContent = existsSync(path)
+      ? (() => { try { return readFileSync(path, "utf-8"); } catch { return null; } })()
+      : null;
     try {
       writeFileSync(path, content);
-      return `successfully wrote to ${path}`;
+      return { ok: true, prevContent };
     } catch {
-      return `error writing to ${path}`;
+      return { ok: false, prevContent: null };
     }
   },
 });
