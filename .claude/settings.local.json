@@ -20,7 +20,21 @@
       "Bash(grep -E \"^\\(figures|chalk|ink-spinner|commander\\)$\")",
       "Bash(bun add:*)",
       "Bash(bunx tsc:*)",
-      "Bash(timeout 5 bun ../packages/lens/src/index.tsx)"
+      "Bash(timeout 5 bun ../packages/lens/src/index.tsx)",
+      "Read(//e/projects//**)",
+      "Read(//c/Users/Time Machine/**)",
+      "Read(//c/Users/**)",
+      "Bash(git -C /e/projects/Lens log --oneline --all)",
+      "Bash(git -C /e/projects/Lens show 76c3eb5:packages/core/src/providers/index.ts)",
+      "Bash(git -C /e/projects/Lens show 76c3eb5 --name-only)",
+      "Bash(git -C /e/projects/Lens show 0ba93e2 --name-only)",
+      "Bash(git -C /e/projects/Lens show ac96e35 --name-only)",
+      "Bash(git -C /e/projects/Lens show 77722e1 --name-only)",
+      "Bash(git -C /e/projects/Lens show 77722e1:src/utils/llm.ts)",
+      "Bash(git -C /e/projects/Lens show 77722e1:src/utils/ai.ts)",
+      "Bash(git:*)",
+      "Bash(find packages:*)",
+      "Bash(bunx husky:*)"
     ]
   }
 }
