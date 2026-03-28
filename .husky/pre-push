@@ -1,0 +1,10 @@
+#!/bin/sh
+# Run bun publish when a tag is being pushed
+
+while read local_ref local_sha remote_ref remote_sha; do
+  if echo "$local_ref" | grep -q "refs/tags/"; then
+    echo "Tag push detected ($local_ref) — publishing packages..."
+    bun publish --access public
+    exit $?
+  fi
+done
