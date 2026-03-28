@@ -1,9 +1,50 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text, useStdout } from "ink";
+import Spinner from "ink-spinner";
+import { resolve } from "path";
+import { homedir } from "os";
 import { TextArea } from "./TextArea";
 import { ACCENT, GREEN, RED } from "../../colors";
 
-// ── Full-width rule input box (old style) ─────────────────────────────────────
+export function AppHeader({
+  model,
+  repoPath,
+}: {
+  model: string;
+  repoPath: string;
+}) {
+  const cols = process.stdout.columns ?? 80;
+  const rule = "─".repeat(Math.max(1, cols));
+  const abs = resolve(repoPath);
+  const displayPath = abs.startsWith(homedir())
+    ? "~" + abs.slice(homedir().length)
+    : abs;
+
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Box gap={2}>
+        <Text color={ACCENT} bold>
+          ◆ lens
+        </Text>
+        <Text color="gray" dimColor>
+          ·
+        </Text>
+        <Text color="white" dimColor>
+          {model}
+        </Text>
+        <Text color="gray" dimColor>
+          ·
+        </Text>
+        <Text color="gray" dimColor>
+          {displayPath}
+        </Text>
+      </Box>
+      <Text color="gray" dimColor>
+        {rule}
+      </Text>
+    </Box>
+  );
+}
 
 export function InputBox({
   value,
@@ -53,23 +94,95 @@ export function InputBox({
 
 // ── Shortcut bar ──────────────────────────────────────────────────────────────
 
+const SHORTCUTS = [
+  ["↵", "send"],
+  ["^↵", "line"],
+  ["^⌫", "word"],
+  ["^f", "force"],
+  ["^c", "exit"],
+] as const;
+
 export function ShortcutBar({
   autoApprove,
   forceApprove,
+  isThinking = false,
+  model,
 }: {
   autoApprove?: boolean;
   forceApprove?: boolean;
+  isThinking?: boolean;
+  model?: string;
 }) {
+  if (isThinking) {
+    return (
+      <Box marginTop={0} gap={1}>
+        <Text color={ACCENT}>
+          <Spinner type="dots" />
+        </Text>
+        {model && (
+          <Text color="gray" dimColor>
+            {model}
+          </Text>
+        )}
+        <Text color="gray" dimColor>
+          · esc cancel
+        </Text>
+      </Box>
+    );
+  }
+
   return (
-    <Box gap={2} marginTop={0}>
-      <Text color="gray" dimColor>
-        enter ↵ · ^↵ newline · ^⌫ del word · ^f force · ^c exit
-      </Text>
-      {forceApprove ? (
-        <Text color={RED} bold>force-all</Text>
-      ) : autoApprove ? (
-        <Text color={GREEN}>auto</Text>
-      ) : null}
+    <Box marginTop={0} justifyContent="space-between">
+      <Box>
+        {forceApprove ? (
+          <>
+            <Text color="gray" dimColor>
+              {" "}
+              ·{" "}
+            </Text>
+            <Text color={RED} bold>
+              force-all
+            </Text>
+          </>
+        ) : autoApprove ? (
+          <>
+            <Text color="gray" dimColor>
+              {" "}
+              ·{" "}
+            </Text>
+            <Text color={GREEN}>auto</Text>
+          </>
+        ) : null}
+        {model && (
+          <>
+            <Text color="gray" dimColor>
+              {" "}
+              ·{" "}
+            </Text>
+            <Text color="gray" dimColor>
+              {model}
+            </Text>
+          </>
+        )}
+      </Box>
+
+      <Box>
+        {SHORTCUTS.map(([key, desc], i) => (
+          <Box key={i}>
+            {i > 0 && (
+              <Text color="gray" dimColor>
+                {" "}
+                ·{" "}
+              </Text>
+            )}
+            <Text color="gray">{key}</Text>
+            <Text color="gray" dimColor>
+              {" "}
+              {desc}
+            </Text>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 }

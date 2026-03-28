@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import { MessageBody } from "@ridit/ink-ui";
 import { ACCENT, GREEN, RED } from "../../colors";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -13,7 +14,51 @@ export type UIMessage =
       content: string;
       result: string;
       approved: boolean;
+      diff?: { prev: string; next: string };
     };
+
+// ── Diff ──────────────────────────────────────────────────────────────────────
+
+type DiffLine = { type: "add" | "remove" | "context"; content: string };
+
+function computeDiff(prev: string, next: string, context = 2): DiffLine[] {
+  const a = prev.split("\n");
+  const b = next.split("\n");
+  if (a.length > 400 || b.length > 400) {
+    return b.map((content) => ({ type: "add" as const, content }));
+  }
+
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0) as number[]);
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i]![j] = a[i - 1] === b[j - 1] ? dp[i - 1]![j - 1]! + 1 : Math.max(dp[i - 1]![j]!, dp[i]![j - 1]!);
+
+  const edits: DiffLine[] = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+      edits.unshift({ type: "context", content: a[i - 1]! });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i]![j - 1]! >= dp[i - 1]![j]!)) {
+      edits.unshift({ type: "add", content: b[j - 1]! });
+      j--;
+    } else {
+      edits.unshift({ type: "remove", content: a[i - 1]! });
+      i--;
+    }
+  }
+
+  const keep = new Set<number>();
+  edits.forEach((e, idx) => {
+    if (e.type !== "context") {
+      for (let k = Math.max(0, idx - context); k <= Math.min(edits.length - 1, idx + context); k++)
+        keep.add(k);
+    }
+  });
+
+  return edits.filter((_, idx) => keep.has(idx));
+}
 
 // ── Tool icons ────────────────────────────────────────────────────────────────
 
@@ -25,119 +70,6 @@ const TOOL_ICONS: Record<string, string> = {
   ls: "d",
   remember: "·",
 };
-
-// ── Inline text renderer ──────────────────────────────────────────────────────
-
-function InlineText({ text }: { text: string }) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.startsWith("`") && part.endsWith("`")) {
-          return (
-            <Text key={i} color={ACCENT}>
-              {part.slice(1, -1)}
-            </Text>
-          );
-        }
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return (
-            <Text key={i} bold color="white">
-              {part.slice(2, -2)}
-            </Text>
-          );
-        }
-        return (
-          <Text key={i} color="white">
-            {part}
-          </Text>
-        );
-      })}
-    </>
-  );
-}
-
-// ── Code block ────────────────────────────────────────────────────────────────
-
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
-  return (
-    <Box flexDirection="column" marginY={0}>
-      {lang ? (
-        <Text color="gray" dimColor>
-          {"  "}{lang}
-        </Text>
-      ) : null}
-      {code.split("\n").map((line, i) => (
-        <Text key={i} color={ACCENT}>
-          {"  "}{line}
-        </Text>
-      ))}
-    </Box>
-  );
-}
-
-// ── Message body (markdown-lite) ──────────────────────────────────────────────
-
-export function MessageBody({ content }: { content: string }) {
-  const segments = content.split(/(```[\s\S]*?```)/g);
-
-  return (
-    <Box flexDirection="column">
-      {segments.map((seg, si) => {
-        if (seg.startsWith("```")) {
-          const lines = seg.slice(3).split("\n");
-          const lang = lines[0]?.trim() ?? "";
-          const code = lines
-            .slice(1)
-            .join("\n")
-            .replace(/```\s*$/, "")
-            .trimEnd();
-          return <CodeBlock key={si} lang={lang} code={code} />;
-        }
-
-        const lines = seg.split("\n").filter((l) => l.trim() !== "");
-        if (lines.length === 0) return null;
-        return (
-          <Box key={si} flexDirection="column">
-            {lines.map((line, li) => {
-              if (line.match(/^#{1,3}\s/)) {
-                return (
-                  <Box key={li}>
-                    <Text bold color={ACCENT}>
-                      {line.replace(/^#+\s/, "")}
-                    </Text>
-                  </Box>
-                );
-              }
-              if (line.match(/^[-*•]\s/)) {
-                return (
-                  <Box key={li} gap={1}>
-                    <Text color={ACCENT}>*</Text>
-                    <InlineText text={line.slice(2).trim()} />
-                  </Box>
-                );
-              }
-              if (line.match(/^\d+\.\s/)) {
-                const num = line.match(/^(\d+)\.\s/)![1];
-                return (
-                  <Box key={li} gap={1}>
-                    <Text color="gray">{num}.</Text>
-                    <InlineText text={line.replace(/^\d+\.\s/, "").trim()} />
-                  </Box>
-                );
-              }
-              return (
-                <Box key={li}>
-                  <InlineText text={line} />
-                </Box>
-              );
-            })}
-          </Box>
-        );
-      })}
-    </Box>
-  );
-}
 
 // ── Static message renderer ───────────────────────────────────────────────────
 
@@ -155,6 +87,39 @@ export function StaticMessage({ msg }: { msg: UIMessage }) {
 
   if (msg.type === "tool") {
     const icon = TOOL_ICONS[msg.toolName] ?? "·";
+
+    if (msg.toolName === "write" && msg.diff) {
+      const lines = computeDiff(msg.diff.prev, msg.diff.next);
+      const additions = lines.filter((l) => l.type === "add").length;
+      const deletions = lines.filter((l) => l.type === "remove").length;
+      return (
+        <Box flexDirection="column" marginBottom={1}>
+          <Box gap={1}>
+            <Text color={ACCENT}>{icon}</Text>
+            <Text color="gray">{msg.content}</Text>
+            {lines.length > 0 && (
+              <>
+                <Text color={GREEN} dimColor>+{additions}</Text>
+                <Text color={RED} dimColor>-{deletions}</Text>
+              </>
+            )}
+          </Box>
+          <Box flexDirection="column" marginLeft={2}>
+            {lines.map((line, i) => (
+              <Text
+                key={i}
+                color={line.type === "add" ? GREEN : line.type === "remove" ? RED : "gray"}
+                dimColor={line.type === "context"}
+              >
+                {line.type === "add" ? "+ " : line.type === "remove" ? "- " : "  "}
+                {line.content}
+              </Text>
+            ))}
+          </Box>
+        </Box>
+      );
+    }
+
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Box gap={1}>

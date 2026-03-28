@@ -11,15 +11,32 @@ program
   .command("chat")
   .description("Chat with your codebase — ask questions or make changes")
   .option("-p, --path <path>", "Path to the repo", ".")
-  .option(
-    "--auto-force",
-    "Start with force-all mode enabled (auto-approves all tools)",
-  )
-  .action((opts: { path: string; autoForce: boolean }) => {
-    render(
-      <ChatCommand path={opts.path} autoForce={opts.autoForce ?? false} />,
-    );
-  });
+  .option("-d, --dev", "Output structured JSON for SDK/tooling use")
+  .option("--single", "Run in single-shot mode, no session persistence")
+  .option("--id <sessionId>", "Resume a specific session by ID")
+  .option("--force-all", "Auto-approve all tools, skip confirmation prompts")
+  .option("--prompt <text>", "Run a single prompt non-interactively")
+  .action(
+    (opts: {
+      path: string;
+      dev?: boolean;
+      single?: boolean;
+      id?: string;
+      forceAll?: boolean;
+      prompt?: string;
+    }) => {
+      render(
+        <ChatCommand
+          path={opts.path}
+          autoForce={opts.forceAll ?? false}
+          dev={opts.dev ?? false}
+          single={opts.single ?? false}
+          sessionId={opts.id}
+          initialMessage={opts.prompt}
+        />,
+      );
+    },
+  );
 
 program
   .command("commit [files...]")
@@ -51,10 +68,9 @@ program
   .command("review [path]")
   .description("Review a local codebase")
   .action((inputPath: string) => {
-    const repoPath = inputPath ?? ".";
     render(
       <ChatCommand
-        path={repoPath}
+        path={inputPath ?? "."}
         initialMessage="Review this codebase thoroughly. Identify strengths, weaknesses, potential bugs, and improvement opportunities."
       />,
     );
