@@ -10,7 +10,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 // anthropic  → claude-sonnet-4.5
 // openai     → gpt-4o
 // google     → gemini-2.0-flash
-// groq       → llama-3.3-70b-versatile
+// groq       → qwen/qwen3-32b
 // openrouter → openai/gpt-4o-mini:free
 // ollama     → llama3.2
 // custom     → gpt-4o (uses whatever model is configured)
@@ -18,7 +18,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4.5";
 const DEFAULT_OPENAI_MODEL = "gpt-4o";
 const DEFAULT_GOOGLE_MODEL = "gemini-2.0-flash";
-const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
+const DEFAULT_GROQ_MODEL = "qwen/qwen3-32b";
 const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini:free";
 const DEFAULT_OLLAMA_MODEL = "llama3.2";
 
