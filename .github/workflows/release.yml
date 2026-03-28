@@ -32,7 +32,7 @@ jobs:
 
       - name: Build CLI binary (exe)
         working-directory: packages/lens
-        run: bun build src/index.tsx --compile --target bun-windows-x64 --outfile dist/lens.exe
+        run: bun build src/index.tsx --compile --target bun-windows-x64 --outfile dist/lens.exe --external react-devtools-core
 
       - name: Get version
         id: version
