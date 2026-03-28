@@ -16,10 +16,10 @@ AppUpdatesURL={#MyAppURL}/releases
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-LicenseFile=..\..\LICENSE
-OutputDir=..\..\dist\installer
+LicenseFile=..\LICENSE
+OutputDir=..\dist\installer
 OutputBaseFilename=lens-setup-{#MyAppVersion}
-SetupIconFile=..\..\packages\lens\assets\icon.ico
+SetupIconFile=..\packages\lens\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -35,7 +35,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "addtopath"; Description: "Add Lens to PATH (recommended)"; GroupDescription: "System integration:"; Flags: checked
 
 [Files]
-Source: "..\..\packages\lens\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\packages\lens\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
