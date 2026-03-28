@@ -1,8 +1,9 @@
 import React, { useState, useRef } from "react";
 import { Box, Text, Static, useInput } from "ink";
-import { ACCENT, RED, GREEN } from "../../colors";
-import { InputBox, ShortcutBar, TypewriterText } from "./StatusBar";
-import { StaticMessage, MessageBody } from "./Message";
+import { ACCENT, GREEN, RED } from "../../colors";
+import { AppHeader, InputBox, ShortcutBar, TypewriterText } from "./StatusBar";
+import { StaticMessage } from "./Message";
+import { MessageBody } from "@ridit/ink-ui";
 import type { UIMessage } from "./Message";
 import { TextArea } from "./TextArea";
 import {
@@ -17,7 +18,15 @@ import {
   getMessages,
   getSystemPrompt,
   saveSession,
+  loadSession,
+  getActiveModelName,
 } from "@ridit/lens-core";
+import { useChatInput } from "../../hooks/useChatInput";
+import { handleCommand } from "../../hooks/useCommandHandler";
+
+// ── Static header (renders once, stays pinned) ────────────────────────────────
+
+const HEADER_ITEMS = [{ type: "header" as const }];
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +54,8 @@ const TOOL_ICONS: Record<string, string> = {
   ls: "d",
   remember: "·",
 };
+
+const SAFE_TOOLS = new Set(["read", "grep", "ls", "remember"]);
 
 function getToolLabel(tool: string, args: unknown): string {
   if (!args || typeof args !== "object") return tool;
@@ -85,19 +96,19 @@ function CommandPalette({ query }: { query: string }) {
   if (!matches.length) return null;
   return (
     <Box flexDirection="column" marginBottom={1} marginLeft={2}>
-      {matches.map((c, i) => {
-        const isExact = c.cmd === query;
-        return (
-          <Box key={i} gap={2}>
-            <Text color={isExact ? ACCENT : "white"} bold={isExact}>
-              {c.cmd}
-            </Text>
-            <Text color="gray" dimColor>
-              {c.desc}
-            </Text>
-          </Box>
-        );
-      })}
+      {matches.map((c, i) => (
+        <Box key={i} gap={2}>
+          <Text
+            color={c.cmd === query ? ACCENT : "white"}
+            bold={c.cmd === query}
+          >
+            {c.cmd}
+          </Text>
+          <Text color="gray" dimColor>
+            {c.desc}
+          </Text>
+        </Box>
+      ))}
     </Box>
   );
 }
@@ -122,10 +133,12 @@ function ForceAllWarning({
           Force-all mode auto-approves EVERY tool without asking — including:
         </Text>
         <Text color="red" dimColor>
-          {" "}· shell commands (rm, git, npm, anything)
+          {" "}
+          · shell commands (rm, git, npm, anything)
         </Text>
         <Text color="red" dimColor>
-          {" "}· file writes and deletes
+          {" "}
+          · file writes and deletes
         </Text>
         <Text color="yellow" dimColor>
           The AI can modify or delete files without any confirmation.
@@ -162,24 +175,39 @@ export function ChatRunner({
   repoPath,
   autoForce = false,
   initialMessage,
+  dev = false,
+  single = false,
+  sessionId,
 }: {
   repoPath: string;
   autoForce?: boolean;
   initialMessage?: string;
+  dev?: boolean;
+  single?: boolean;
+  sessionId?: string;
 }) {
   const [stage, setStage] = useState<"idle" | "thinking">("idle");
   const [committed, setCommitted] = useState<UIMessage[]>([]);
-  const [inputValue, setInputValue] = useState(initialMessage ?? "");
-  const [inputKey, setInputKey] = useState(0);
   const [currentChunk, setCurrentChunk] = useState("");
   const [autoApprove, setAutoApprove] = useState(autoForce);
   const [forceApprove, setForceApprove] = useState(autoForce);
+  const forceApproveRef = useRef(autoForce);
   const [showForceWarning, setShowForceWarning] = useState(false);
+  const [approvalRequest, setApprovalRequest] = useState<{
+    tool: string;
+    args: unknown;
+    label: string;
+  } | null>(null);
+  const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
 
-  const sessionRef = useRef(createSession(repoPath));
+  // session — resume by id, or load latest, or create fresh
+  const sessionRef = useRef(
+    sessionId
+      ? (loadSession(sessionId) ?? createSession(repoPath))
+      : createSession(repoPath),
+  );
+
   const abortRef = useRef<AbortController | null>(null);
-  const inputHistoryRef = useRef<string[]>([]);
-  const historyIndexRef = useRef<number>(-1);
   const pendingToolRef = useRef<{ tool: string; args: unknown } | null>(null);
 
   const isThinking = stage === "thinking";
@@ -187,19 +215,46 @@ export function ChatRunner({
   const thinkingTip = useThinkingTip(isThinking);
   const thinkingTimer = useThinkingTimer(isThinking);
 
-  const pushMsg = (msg: UIMessage) =>
-    setCommitted((prev) => [...prev, msg]);
+  const {
+    inputValue,
+    setInputValue,
+    inputKey,
+    pushHistory,
+    historyUp,
+    historyDown,
+    clear,
+  } = useChatInput(initialMessage);
 
-  // ── Keyboard handling ──────────────────────────────────────────────────────
+  const pushMsg = (msg: UIMessage) => setCommitted((prev) => [...prev, msg]);
+
+  // ── Keyboard ───────────────────────────────────────────────────────────────
 
   useInput((input, key) => {
-    if (key.ctrl && input === "c") {
-      process.exit(0);
+    if (key.ctrl && input === "c") process.exit(0);
+
+    if (approvalRequest) {
+      if (input === "y") {
+        approvalResolveRef.current?.(true);
+        approvalResolveRef.current = null;
+        setApprovalRequest(null);
+      } else if (input === "n") {
+        approvalResolveRef.current?.(false);
+        approvalResolveRef.current = null;
+        setApprovalRequest(null);
+      } else if (input === "a") {
+        forceApproveRef.current = true;
+        setForceApprove(true);
+        setAutoApprove(true);
+        approvalResolveRef.current?.(true);
+        approvalResolveRef.current = null;
+        setApprovalRequest(null);
+      }
+      return;
     }
 
-    // ctrl+f toggles force-all
     if (key.ctrl && input === "f" && stage === "idle" && !showForceWarning) {
       if (forceApprove) {
+        forceApproveRef.current = false;
         setForceApprove(false);
         setAutoApprove(false);
         pushMsg({
@@ -213,13 +268,11 @@ export function ChatRunner({
       return;
     }
 
-    // esc during force-all warning
     if (showForceWarning && key.escape) {
       setShowForceWarning(false);
       return;
     }
 
-    // esc cancels thinking
     if (stage === "thinking" && key.escape) {
       abortRef.current?.abort();
       abortRef.current = null;
@@ -228,145 +281,92 @@ export function ChatRunner({
       return;
     }
 
-    // input history navigation (only when idle, not showing force warning)
     if (stage === "idle" && !showForceWarning) {
-      if (key.upArrow && inputHistoryRef.current.length > 0) {
-        const next = Math.min(
-          historyIndexRef.current + 1,
-          inputHistoryRef.current.length - 1,
-        );
-        historyIndexRef.current = next;
-        setInputValue(inputHistoryRef.current[next]!);
-        setInputKey((k) => k + 1);
+      if (key.upArrow) {
+        historyUp();
         return;
       }
       if (key.downArrow) {
-        const next = historyIndexRef.current - 1;
-        historyIndexRef.current = next;
-        setInputValue(next < 0 ? "" : inputHistoryRef.current[next]!);
-        setInputKey((k) => k + 1);
+        historyDown();
         return;
       }
-      // tab autocomplete slash commands
       if (key.tab && inputValue.startsWith("/")) {
-        const q = inputValue.toLowerCase();
-        const match = COMMANDS.find((c) => c.cmd.startsWith(q));
+        const match = COMMANDS.find((c) =>
+          c.cmd.startsWith(inputValue.toLowerCase()),
+        );
         if (match) setInputValue(match.cmd);
         return;
       }
     }
   });
 
-  // ── Slash commands ─────────────────────────────────────────────────────────
-
-  const handleCommand = (text: string): boolean => {
-    const t = text.trim().toLowerCase();
-
-    if (t === "/auto --force-all") {
-      if (forceApprove) {
-        setForceApprove(false);
-        setAutoApprove(false);
-        pushMsg({
-          role: "assistant",
-          type: "text",
-          content: "Force-all mode OFF — tools will ask for permission again.",
-        });
-      } else {
-        setShowForceWarning(true);
-      }
-      return true;
-    }
-
-    if (t === "/auto") {
-      if (forceApprove) {
-        setForceApprove(false);
-        setAutoApprove(true);
-        pushMsg({
-          role: "assistant",
-          type: "text",
-          content:
-            "Force-all mode OFF — switched to normal auto-approve (safe tools only).",
-        });
-        return true;
-      }
-      const next = !autoApprove;
-      setAutoApprove(next);
-      pushMsg({
-        role: "assistant",
-        type: "text",
-        content: next
-          ? "Auto-approve ON — safe tools (read, search, grep) will run without asking."
-          : "Auto-approve OFF — all tools will ask for permission.",
-      });
-      return true;
-    }
-
-    if (t === "/clear history") {
-      sessionRef.current = createSession(repoPath);
-      pushMsg({
-        role: "assistant",
-        type: "text",
-        content: "History cleared for this repo.",
-      });
-      return true;
-    }
-
-    if (t === "/memory" || t === "/memory list") {
-      pushMsg({
-        role: "assistant",
-        type: "text",
-        content:
-          "Memory is managed automatically. Use `/memory add <text>` to save context.",
-      });
-      return true;
-    }
-
-    if (t.startsWith("/memory add")) {
-      const content = text.trim().slice("/memory add".length).trim();
-      if (!content) {
-        pushMsg({
-          role: "assistant",
-          type: "text",
-          content: "Usage: `/memory add <content>`",
-        });
-        return true;
-      }
-      // Pass memory add as a system note — just acknowledge for now
-      pushMsg({
-        role: "assistant",
-        type: "text",
-        content: `Memory saved: ${content}`,
-      });
-      return true;
-    }
-
-    if (t === "/memory clear") {
-      pushMsg({
-        role: "assistant",
-        type: "text",
-        content: "Memories cleared.",
-      });
-      return true;
-    }
-
-    return false;
-  };
-
   // ── Send message ───────────────────────────────────────────────────────────
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || stage !== "idle") return;
 
-    // push to history
-    inputHistoryRef.current = [
-      text,
-      ...inputHistoryRef.current.filter((m) => m !== text),
-    ].slice(0, 50);
-    historyIndexRef.current = -1;
+    pushHistory(text);
 
-    // handle slash commands
     if (text.startsWith("/")) {
-      if (handleCommand(text)) return;
+      if (
+        handleCommand(text, {
+          repoPath,
+          autoApprove,
+          forceApprove,
+          setAutoApprove,
+          setForceApprove,
+          setShowForceWarning,
+          pushMsg,
+          resetSession: () => {
+            sessionRef.current = createSession(repoPath);
+          },
+        })
+      )
+        return;
+    }
+
+    // dev mode — output JSON to stdout and exit
+    if (dev) {
+      pushMsg({ role: "user", type: "text", content: text });
+      sessionRef.current = addMessage(sessionRef.current, "user", text);
+      setStage("thinking");
+      setCurrentChunk("");
+
+      let fullText = "";
+      try {
+        await chat({
+          messages: getMessages(sessionRef.current),
+          system: getSystemPrompt(repoPath),
+          onChunk: (chunk) => {
+            fullText += chunk;
+          },
+          onToolCall: () => {},
+          onToolResult: () => {},
+          onFinish: (text) => {
+            fullText = text;
+            if (!single) {
+              sessionRef.current = addMessage(
+                sessionRef.current,
+                "assistant",
+                text,
+              );
+              saveSession(sessionRef.current);
+            }
+            process.stdout.write(
+              JSON.stringify({
+                text: fullText,
+                sessionId: sessionRef.current.id,
+              }) + "\n",
+            );
+            process.exit(0);
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stdout.write(JSON.stringify({ error: msg }) + "\n");
+        process.exit(1);
+      }
+      return;
     }
 
     pushMsg({ role: "user", type: "text", content: text });
@@ -378,35 +378,61 @@ export function ChatRunner({
     const abort = new AbortController();
     abortRef.current = abort;
 
+    abort.signal.addEventListener("abort", () => {
+      if (approvalResolveRef.current) {
+        approvalResolveRef.current(false);
+        approvalResolveRef.current = null;
+        setApprovalRequest(null);
+      }
+    });
+
     try {
       await chat({
         messages: getMessages(sessionRef.current),
         system: getSystemPrompt(repoPath),
+        onBeforeToolCall: (tool, args) => {
+          if (forceApproveRef.current || SAFE_TOOLS.has(tool)) return Promise.resolve(true);
+          const label = getToolLabel(tool, args);
+          return new Promise((resolve) => {
+            setApprovalRequest({ tool, args, label });
+            approvalResolveRef.current = resolve;
+          });
+        },
         onChunk: (chunk) => {
-          if (!abort.signal.aborted) {
-            setCurrentChunk((prev) => prev + chunk);
-          }
+          if (!abort.signal.aborted) setCurrentChunk((prev) => prev + chunk);
         },
         onToolCall: (tool, args) => {
-          if (!abort.signal.aborted) {
-            pendingToolRef.current = { tool, args };
-          }
+          if (!abort.signal.aborted) pendingToolRef.current = { tool, args };
         },
         onToolResult: (tool, result) => {
           if (!abort.signal.aborted && pendingToolRef.current) {
             const { tool: t, args } = pendingToolRef.current;
-            const label = getToolLabel(t, args);
-            const icon = TOOL_ICONS[t] ?? "·";
-            const resultStr = summarizeResult(
-              typeof result === "string" ? result : JSON.stringify(result),
-            );
+            const label = (getToolLabel(t, args) || TOOL_ICONS[t]) ?? "·";
+            const a = args as Record<string, unknown>;
+
+            let resultStr: string;
+            let diff: { prev: string; next: string } | undefined;
+
+            if (t === "write" && result && typeof result === "object") {
+              const r = result as { ok: boolean; prevContent: string | null };
+              resultStr = r.ok ? "ok" : "error";
+              if (r.ok && typeof a.content === "string") {
+                diff = { prev: r.prevContent ?? "", next: a.content };
+              }
+            } else {
+              resultStr = summarizeResult(
+                typeof result === "string" ? result : JSON.stringify(result),
+              );
+            }
+
             pushMsg({
               role: "assistant",
               type: "tool",
               toolName: t,
-              content: label || icon,
+              content: label,
               result: resultStr,
               approved: true,
+              diff,
             });
             pendingToolRef.current = null;
           }
@@ -420,7 +446,8 @@ export function ChatRunner({
                 "assistant",
                 fullText,
               );
-              saveSession(sessionRef.current);
+              // single mode — don't persist session
+              if (!single) saveSession(sessionRef.current);
             }
           }
           setCurrentChunk("");
@@ -437,10 +464,23 @@ export function ChatRunner({
     }
   };
 
+  // ── Auto-send initial message ──────────────────────────────────────────────
+
+  const didAutoSend = useRef(false);
+  React.useEffect(() => {
+    if (initialMessage && !didAutoSend.current) {
+      didAutoSend.current = true;
+      sendMessage(initialMessage);
+    }
+  }, []);
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <Box flexDirection="column">
+      <Static items={HEADER_ITEMS}>
+        {(_, i) => <AppHeader key={i} model={getActiveModelName()} repoPath={repoPath} />}
+      </Static>
       <Static items={committed}>
         {(msg, i) => <StaticMessage key={i} msg={msg} />}
       </Static>
@@ -450,6 +490,7 @@ export function ChatRunner({
           onConfirm={(confirmed) => {
             setShowForceWarning(false);
             if (confirmed) {
+              forceApproveRef.current = true;
               setForceApprove(true);
               setAutoApprove(true);
               pushMsg({
@@ -474,21 +515,13 @@ export function ChatRunner({
           {currentChunk ? (
             <Box gap={1}>
               <Text color={ACCENT}>●</Text>
-              <Box flexDirection="column">
-                <MessageBody content={currentChunk} />
-                <Text color="gray" dimColor>
-                  {thinkingTimer ? `${thinkingTimer} · ` : ""}esc cancel
-                </Text>
-              </Box>
+              <MessageBody content={currentChunk} />
             </Box>
           ) : (
             <>
               <Box gap={1}>
                 <Text color={ACCENT}>●</Text>
                 <TypewriterText text={thinkingPhrase} />
-                <Text color="gray" dimColor>
-                  {thinkingTimer ? `· ${thinkingTimer} ` : ""}· esc cancel
-                </Text>
               </Box>
               <Box marginLeft={2}>
                 <Text color="gray" dimColor>
@@ -500,23 +533,47 @@ export function ChatRunner({
         </Box>
       )}
 
+      {approvalRequest && (
+        <Box flexDirection="column" marginTop={1} marginLeft={2} gap={0}>
+          <Box gap={1}>
+            <Text color="yellow">?</Text>
+            <Text color={ACCENT}>{TOOL_ICONS[approvalRequest.tool] ?? "·"}</Text>
+            <Text color="white">{approvalRequest.label || approvalRequest.tool}</Text>
+          </Box>
+          <Box gap={1} marginLeft={2}>
+            <Text color="gray" dimColor>allow?</Text>
+            <Text color={GREEN}>y</Text>
+            <Text color="gray" dimColor> yes  ·  </Text>
+            <Text color={RED}>n</Text>
+            <Text color="gray" dimColor> no  ·  </Text>
+            <Text color={ACCENT}>a</Text>
+            <Text color="gray" dimColor> allow all</Text>
+          </Box>
+        </Box>
+      )}
+
       {!showForceWarning && stage === "idle" && (
         <Box flexDirection="column">
-          {inputValue.startsWith("/") && (
-            <CommandPalette query={inputValue} />
-          )}
+          {inputValue.startsWith("/") && <CommandPalette query={inputValue} />}
           <InputBox
             value={inputValue}
             onChange={(v) => setInputValue(v)}
             onSubmit={(val) => {
               if (val.trim()) sendMessage(val.trim());
-              setInputValue("");
-              setInputKey((k) => k + 1);
+              clear();
             }}
             inputKey={inputKey}
           />
-          <ShortcutBar autoApprove={autoApprove} forceApprove={forceApprove} />
         </Box>
+      )}
+
+      {!showForceWarning && (
+        <ShortcutBar
+          autoApprove={autoApprove}
+          forceApprove={forceApprove}
+          isThinking={isThinking}
+          model={getActiveModelName()}
+        />
       )}
     </Box>
   );
