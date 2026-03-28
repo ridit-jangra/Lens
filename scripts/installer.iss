@@ -19,7 +19,6 @@ DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 OutputDir=..\dist\installer
 OutputBaseFilename=lens-setup-{#MyAppVersion}
-SetupIconFile=..\packages\lens\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
