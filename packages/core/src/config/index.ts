@@ -17,8 +17,9 @@ export interface Config {
   providers: Partial<Record<Provider, ProviderSettings>>;
 }
 
-const CONFIG_DIR = join(homedir(), ".lens");
-const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+// Resolved lazily so tests can patch process.env.HOME / USERPROFILE before importing
+function getConfigDir() { return join(homedir(), ".lens"); }
+function getConfigPath() { return join(getConfigDir(), "config.json"); }
 // stored at ~/.lens/config.json
 
 // if no config exists, this will be the default
@@ -29,21 +30,21 @@ const DEFAULT_CONFIG: Config = {
 
 export function loadConfig(): Config {
   if (!configExists()) {
-    mkdirSync(CONFIG_DIR, { recursive: true }); // create .lens folder
+    mkdirSync(getConfigDir(), { recursive: true });
     saveConfig(DEFAULT_CONFIG);
     return DEFAULT_CONFIG;
   }
 
-  const config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as Config;
+  const config = JSON.parse(readFileSync(getConfigPath(), "utf-8")) as Config;
   return config;
 }
 
 export function saveConfig(config: Config): void {
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+  writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
 }
 
 export function configExists(): boolean {
-  return existsSync(CONFIG_PATH);
+  return existsSync(getConfigPath());
 }
 
 export function getActiveProvider(): ProviderSettings & { provider: Provider } {
@@ -60,11 +61,9 @@ export function getActiveProvider(): ProviderSettings & { provider: Provider } {
 export function setActiveProvider(provider: Provider): void {
   if (!configExists()) throw new Error("config.json not found.");
 
-  const config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as Config;
-
+  const config = loadConfig();
   const newConfig = { ...config, activeProvider: provider } as Config;
-
-  writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2));
+  saveConfig(newConfig);
 }
 
 export function addProvider(
