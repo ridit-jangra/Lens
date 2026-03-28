@@ -9,6 +9,7 @@ interface CommandContext {
   setForceApprove: (v: boolean) => void;
   pushMsg: (msg: UIMessage) => void;
   resetSession: () => void;
+  openProvider?: () => void;
 }
 
 export function handleCommand(text: string, ctx: CommandContext): boolean {
@@ -104,6 +105,11 @@ export function handleCommand(text: string, ctx: CommandContext): boolean {
       type: "text",
       content: "Memories cleared.",
     });
+    return true;
+  }
+
+  if (t === "/provider") {
+    ctx.openProvider?.();
     return true;
   }
 

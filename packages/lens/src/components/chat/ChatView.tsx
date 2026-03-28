@@ -5,6 +5,7 @@ import { AppHeader, InputBox, ShortcutBar, TypewriterText } from "./StatusBar";
 import { StaticMessage } from "./Message";
 import { MessageBody } from "@ridit/ink-ui";
 import type { UIMessage } from "./Message";
+import { ProviderSetup } from "../provider/ProviderSetup";
 import {
   useThinkingPhrase,
   useThinkingTip,
@@ -13,11 +14,14 @@ import {
 import {
   chat,
   createSession,
+  createSessionWithId,
   addMessage,
+  appendMessages,
   getMessages,
   getSystemPrompt,
   saveSession,
   loadSession,
+  getLatestSession,
   getActiveModelName,
 } from "@ridit/lens-core";
 import { useChatInput } from "../../hooks/useChatInput";
@@ -41,6 +45,7 @@ export const COMMANDS = [
   { cmd: "/memory add", desc: "add a memory" },
   { cmd: "/memory delete", desc: "delete a memory by id" },
   { cmd: "/memory clear", desc: "clear all memories" },
+  { cmd: "/provider", desc: "configure AI provider" },
 ];
 
 // ── Tool helpers ──────────────────────────────────────────────────────────────
@@ -131,6 +136,7 @@ export function ChatRunner({
   sessionId?: string;
 }) {
   const [stage, setStage] = useState<"idle" | "thinking">("idle");
+  const [showProvider, setShowProvider] = useState(false);
   const [committed, setCommitted] = useState<UIMessage[]>([]);
   const [currentChunk, setCurrentChunk] = useState("");
   const [autoApprove, setAutoApprove] = useState(autoForce);
@@ -143,11 +149,16 @@ export function ChatRunner({
   } | null>(null);
   const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
 
-  // session — resume by id, or load latest, or create fresh
+  // session:
+  //   --session <id>  → resume if exists, else create with that exact id
+  //   --single        → resume latest session for repo (or fresh)
+  //   default         → fresh session
   const sessionRef = useRef(
     sessionId
-      ? (loadSession(sessionId) ?? createSession(repoPath))
-      : createSession(repoPath),
+      ? (loadSession(sessionId) ?? createSessionWithId(sessionId, repoPath))
+      : single
+        ? (getLatestSession(repoPath) ?? createSession(repoPath))
+        : createSession(repoPath),
   );
 
   const abortRef = useRef<AbortController | null>(null);
@@ -265,42 +276,40 @@ export function ChatRunner({
           resetSession: () => {
             sessionRef.current = createSession(repoPath);
           },
+          openProvider: () => setShowProvider(true),
         })
       )
         return;
     }
 
-    // dev mode — output JSON to stdout and exit
+    // dev mode — output structured JSON to stdout and exit
     if (dev) {
-      pushMsg({ role: "user", type: "text", content: text });
       sessionRef.current = addMessage(sessionRef.current, "user", text);
-      setStage("thinking");
-      setCurrentChunk("");
 
-      let fullText = "";
+      const devTools: { tool: string; args: unknown; result: unknown }[] = [];
       try {
         await chat({
           messages: getMessages(sessionRef.current),
           system: getSystemPrompt(repoPath),
-          onChunk: (chunk) => {
-            fullText += chunk;
+          onChunk: () => {},
+          onToolCall: (tool, args) => {
+            devTools.push({ tool, args, result: null });
           },
-          onToolCall: () => {},
-          onToolResult: () => {},
-          onFinish: (text) => {
-            fullText = text;
+          onToolResult: (tool, result) => {
+            const entry = [...devTools].reverse().find((t) => t.tool === tool && t.result === null);
+            if (entry) entry.result = result;
+          },
+          onFinish: (fullText, responseMessages, model) => {
             if (!single) {
-              sessionRef.current = addMessage(
-                sessionRef.current,
-                "assistant",
-                text,
-              );
+              sessionRef.current = appendMessages(sessionRef.current, responseMessages);
               saveSession(sessionRef.current);
             }
             process.stdout.write(
               JSON.stringify({
-                text: fullText,
+                message: fullText,
+                model,
                 sessionId: sessionRef.current.id,
+                tools: devTools,
               }) + "\n",
             );
             process.exit(0);
@@ -382,18 +391,16 @@ export function ChatRunner({
             pendingToolRef.current = null;
           }
         },
-        onFinish: (fullText) => {
+        onFinish: (fullText, responseMessages) => {
           if (!abort.signal.aborted) {
+            // always save full response messages (includes tool calls) for context
+            sessionRef.current = appendMessages(sessionRef.current, responseMessages);
+            if (!single) saveSession(sessionRef.current);
+
             if (fullText.trim()) {
               pushMsg({ role: "assistant", type: "text", content: fullText });
-              sessionRef.current = addMessage(
-                sessionRef.current,
-                "assistant",
-                fullText,
-              );
-              // single mode — don't persist session
-              if (!single) saveSession(sessionRef.current);
             }
+            if (single) process.exit(0);
           }
           setCurrentChunk("");
           setStage("idle");
@@ -472,7 +479,22 @@ export function ChatRunner({
         </Box>
       )}
 
-      {stage === "idle" && (
+      {showProvider && (
+        <Box flexDirection="column" paddingX={1} paddingY={1}>
+          <ProviderSetup
+            onDone={() => {
+              setShowProvider(false);
+              pushMsg({
+                role: "assistant",
+                type: "text",
+                content: `Provider updated. Now using **${getActiveModelName()}**.`,
+              });
+            }}
+          />
+        </Box>
+      )}
+
+      {stage === "idle" && !showProvider && (
         <Box flexDirection="column">
           {inputValue.startsWith("/") && <CommandPalette query={inputValue} />}
           <InputBox
