@@ -128,6 +128,7 @@ export function ChatRunner({
   dev = false,
   single = false,
   sessionId,
+  runtimeTools,
 }: {
   repoPath: string;
   autoForce?: boolean;
@@ -135,6 +136,7 @@ export function ChatRunner({
   dev?: boolean;
   single?: boolean;
   sessionId?: string;
+  runtimeTools?: string;
 }) {
   const [stage, setStage] = useState<"idle" | "thinking">("idle");
   const [showProvider, setShowProvider] = useState(false);
@@ -292,6 +294,7 @@ export function ChatRunner({
         await chat({
           messages: getMessages(sessionRef.current),
           system: getSystemPrompt(repoPath),
+          runtimeTools,
           onChunk: () => {},
           onToolCall: (tool, args) => {
             devTools.push({ tool, args, result: null });
@@ -350,6 +353,7 @@ export function ChatRunner({
       await chat({
         messages: getMessages(sessionRef.current),
         system: getSystemPrompt(repoPath),
+        runtimeTools,
         onBeforeToolCall: (tool, args) => {
           if (forceApproveRef.current || SAFE_TOOLS.has(tool))
             return Promise.resolve(true);

@@ -76,6 +76,7 @@ async function runHeadless(opts: {
   sessionId?: string;
   single?: boolean;
   forceAll?: boolean;
+  runtimeTools?: string;
 }) {
   const repoPath = opts.path;
 
@@ -101,13 +102,23 @@ async function runHeadless(opts: {
   const toolLog: { tool: string; args: unknown; result: unknown }[] = [];
   const denied: { tool: string; description: string }[] = [];
 
+  // runtime tools are explicitly user-provided — always approve them
+  const runtimeToolNames = new Set<string>();
+  if (opts.runtimeTools) {
+    try {
+      const raw = JSON.parse(require("fs").readFileSync(opts.runtimeTools, "utf-8"));
+      if (Array.isArray(raw)) raw.forEach((t: { name: string }) => runtimeToolNames.add(t.name));
+    } catch { /* ignore parse errors */ }
+  }
+
   await chat({
     messages: getMessages(session),
     system: getSystemPrompt(repoPath),
+    runtimeTools: opts.runtimeTools,
     // 2 steps: 1 tool attempt (or denial) + 1 text response
     maxSteps: opts.forceAll ? 50 : 2,
     onBeforeToolCall: (tool, args) => {
-      if (opts.forceAll || HEADLESS_SAFE_TOOLS.has(tool)) return Promise.resolve(true);
+      if (opts.forceAll || HEADLESS_SAFE_TOOLS.has(tool) || runtimeToolNames.has(tool)) return Promise.resolve(true);
       // record denial — model will respond naturally explaining what it needs
       const a = args as Record<string, unknown>;
       const description =
@@ -159,6 +170,7 @@ program
   .option("--id <id>", "Alias for --session")
   .option("--force-all", "Auto-approve all tools")
   .option("--prompt <text>", "Run a prompt non-interactively")
+  .option("--runtime-tools <path>", "path to runtime tools JSON file")
   .action(
     (opts: {
       path: string;
@@ -168,11 +180,12 @@ program
       id?: string;
       forceAll?: boolean;
       prompt?: string;
+      runtimeTools?: string;
     }) => {
       const sessionId = opts.session ?? opts.id;
       // headless: dev+prompt or single+prompt → no UI, output JSON and exit
       if (opts.prompt && (opts.dev || opts.single)) {
-        runHeadless({ path: opts.path, prompt: opts.prompt, sessionId, single: opts.single, forceAll: opts.forceAll });
+        runHeadless({ path: opts.path, prompt: opts.prompt, sessionId, single: opts.single, forceAll: opts.forceAll, runtimeTools: opts.runtimeTools });
         return;
       }
       render(
@@ -183,6 +196,7 @@ program
           single={opts.single ?? false}
           sessionId={sessionId}
           initialMessage={opts.prompt}
+          runtimeTools={opts.runtimeTools}
         />,
       );
     },
