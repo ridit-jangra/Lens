@@ -44,3 +44,8 @@ testing-lens
 thing-to-remember
 
 lens-old
+
+test-tools.json
+
+# Claude Code
+.claude
