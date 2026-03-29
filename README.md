@@ -41,6 +41,7 @@ lens chat --dev                         output structured JSON (for SDK/tooling 
 lens chat --single                      run one message then exit, resumes latest session
 lens chat --force-all                   auto-approve all tools including writes and shell
 lens chat --dev --prompt <text>         headless mode: JSON output, no UI
+lens chat --runtime-tools <path>        load extra tools from a JSON file at runtime
 
 lens provider                           configure AI providers (interactive)
 lens provider --list                    list configured providers
@@ -90,7 +91,32 @@ Once inside a `lens chat` session, use slash commands:
 
 ## Extending Lens
 
-Custom tools can be built and registered using [`@ridit/lens-sdk`](https://www.npmjs.com/package/@ridit/lens-sdk).
+### Runtime Tools
+
+Pass a JSON file to `--runtime-tools` to inject custom tools into any chat session without modifying Lens itself. Each tool declares a name, description, optional parameters, and an HTTP endpoint that Lens will POST to when the AI calls it.
+
+```json
+[
+  {
+    "name": "get_weather",
+    "description": "Returns current weather for a city",
+    "parameters": {
+      "city": { "type": "string", "description": "City name" }
+    },
+    "endpoint": "http://localhost:4242/get_weather"
+  }
+]
+```
+
+```bash
+lens chat --runtime-tools ./my-tools.json --prompt "What's the weather in London?"
+```
+
+Lens POSTs the tool arguments as JSON to the endpoint and returns the response body to the model. Runtime tools are always auto-approved in headless mode.
+
+### SDK
+
+Custom tools can also be built and registered using [`@ridit/lens-sdk`](https://www.npmjs.com/package/@ridit/lens-sdk).
 
 ## License
 
