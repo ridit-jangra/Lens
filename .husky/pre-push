@@ -10,8 +10,14 @@ while read local_ref local_sha remote_ref remote_sha; do
         is_private=$(node -e "const p=require('./$pkg_json'); process.stdout.write(p.private ? 'true' : 'false')")
         if [ "$is_private" = "false" ]; then
           pkg_name=$(node -e "const p=require('./$pkg_json'); process.stdout.write(p.name)")
-          echo "Publishing $pkg_name..."
-          (cd "$pkg_dir" && bun publish --access public) || exit 1
+          pkg_version=$(node -e "const p=require('./$pkg_json'); process.stdout.write(p.version)")
+          already_published=$(npm view "$pkg_name@$pkg_version" version 2>/dev/null || true)
+          if [ "$already_published" = "$pkg_version" ]; then
+            echo "Skipping $pkg_name@$pkg_version (already published)"
+          else
+            echo "Publishing $pkg_name@$pkg_version..."
+            (cd "$pkg_dir" && bun publish --access public) || exit 1
+          fi
         fi
       fi
     done
