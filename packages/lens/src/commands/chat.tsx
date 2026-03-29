@@ -9,6 +9,7 @@ export function ChatCommand({
   dev = false,
   single = false,
   sessionId,
+  runtimeTools,
 }: {
   path: string;
   autoForce?: boolean;
@@ -16,6 +17,7 @@ export function ChatCommand({
   dev?: boolean;
   single?: boolean;
   sessionId?: string;
+  runtimeTools?: string;
 }) {
   return (
     <Box flexDirection="column">
@@ -26,6 +28,7 @@ export function ChatCommand({
         dev={dev}
         single={single}
         sessionId={sessionId}
+        runtimeTools={runtimeTools}
       />
     </Box>
   );
