@@ -93,6 +93,8 @@ async function runHeadless(opts: {
     // This leaves the session ending at the last successful state so the agent
     // can re-attempt the denied tool with forceAll: true.
     const msgs = getMessages(session);
+    // Capture the pending denied action before trimming so we can add an explicit proceed instruction
+    const pending = getLastDeniedAction(msgs);
     let trimAt = -1;
     for (let i = msgs.length - 1; i >= 0; i--) {
       const msg = msgs[i];
@@ -118,6 +120,14 @@ async function runHeadless(opts: {
     }
     if (trimAt >= 0) {
       session = { ...session, messages: msgs.slice(0, trimAt) };
+    }
+    // Add an explicit instruction to proceed with the denied tool so the model doesn't ask again
+    if (pending) {
+      session = addMessage(
+        session,
+        "user",
+        `Proceed with the previously denied operation: use the ${pending.tool} tool on "${pending.description}". Permission has been granted.`,
+      );
     }
     // Save trimmed session so context is clean for this run
     if (!opts.single || opts.sessionId) saveSession(session);
