@@ -72,11 +72,12 @@ function getLastDeniedAction(messages: ReturnType<typeof getMessages>): { tool: 
 
 async function runHeadless(opts: {
   path: string;
-  prompt: string;
+  prompt?: string;
   sessionId?: string;
   single?: boolean;
   forceAll?: boolean;
   runtimeTools?: string;
+  resume?: boolean;
 }) {
   const repoPath = opts.path;
 
@@ -86,18 +87,54 @@ async function runHeadless(opts: {
       ? (getLatestSession(repoPath) ?? createSession(repoPath))
       : createSession(repoPath);
 
-  // if user is approving a prior denial, make the intent unambiguous
-  let prompt = opts.prompt;
-  if (opts.forceAll && APPROVAL_WORDS.has(prompt.trim().toLowerCase())) {
-    const pending = getLastDeniedAction(getMessages(session));
-    if (pending) {
-      prompt = `Proceed with the previously denied operation: use the ${pending.tool} tool on "${pending.description}".`;
+  if (opts.resume) {
+    // Rewind the session: strip the last denied tool-call (assistant message),
+    // its "Permission denied" tool result, and the assistant's text response after it.
+    // This leaves the session ending at the last successful state so the agent
+    // can re-attempt the denied tool with forceAll: true.
+    const msgs = getMessages(session);
+    let trimAt = -1;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i];
+      if (!msg || msg.role !== "tool") continue;
+      const content = Array.isArray(msg.content) ? msg.content : [];
+      const isDenied = content.some(
+        (p: unknown) =>
+          typeof p === "object" && p !== null &&
+          "type" in p && (p as { type: string }).type === "tool-result" &&
+          "result" in p && typeof (p as { result: unknown }).result === "string" &&
+          ((p as { result: string }).result).includes("Permission denied"),
+      );
+      if (isDenied) {
+        // Find the assistant message immediately before this tool result (the tool-call message)
+        for (let j = i - 1; j >= 0; j--) {
+          if (msgs[j]?.role === "assistant") {
+            trimAt = j;
+            break;
+          }
+        }
+        break;
+      }
     }
-  }
+    if (trimAt >= 0) {
+      session = { ...session, messages: msgs.slice(0, trimAt) };
+    }
+    // Save trimmed session so context is clean for this run
+    if (!opts.single || opts.sessionId) saveSession(session);
+  } else {
+    // if user is approving a prior denial, make the intent unambiguous
+    let prompt = opts.prompt!;
+    if (opts.forceAll && APPROVAL_WORDS.has(prompt.trim().toLowerCase())) {
+      const pending = getLastDeniedAction(getMessages(session));
+      if (pending) {
+        prompt = `Proceed with the previously denied operation: use the ${pending.tool} tool on "${pending.description}".`;
+      }
+    }
 
-  session = addMessage(session, "user", prompt);
-  // save now so context is available on follow-up messages even if we exit early
-  if (!opts.single || opts.sessionId) saveSession(session);
+    session = addMessage(session, "user", prompt);
+    // save now so context is available on follow-up messages even if we exit early
+    if (!opts.single || opts.sessionId) saveSession(session);
+  }
 
   const toolLog: { tool: string; args: unknown; result: unknown }[] = [];
   const denied: { tool: string; description: string }[] = [];
@@ -170,6 +207,7 @@ program
   .option("--id <id>", "Alias for --session")
   .option("--force-all", "Auto-approve all tools")
   .option("--prompt <text>", "Run a prompt non-interactively")
+  .option("--resume", "Resume from last permission-denied tool call (no new prompt needed)")
   .option("--runtime-tools <path>", "path to runtime tools JSON file")
   .action(
     (opts: {
@@ -180,12 +218,13 @@ program
       id?: string;
       forceAll?: boolean;
       prompt?: string;
+      resume?: boolean;
       runtimeTools?: string;
     }) => {
       const sessionId = opts.session ?? opts.id;
-      // headless: dev+prompt or single+prompt → no UI, output JSON and exit
-      if (opts.prompt && (opts.dev || opts.single)) {
-        runHeadless({ path: opts.path, prompt: opts.prompt, sessionId, single: opts.single, forceAll: opts.forceAll, runtimeTools: opts.runtimeTools });
+      // headless: dev+prompt, single+prompt, or --resume → no UI, output JSON and exit
+      if ((opts.prompt || opts.resume) && (opts.dev || opts.single)) {
+        runHeadless({ path: opts.path, prompt: opts.prompt, sessionId, single: opts.single, forceAll: opts.forceAll ?? opts.resume, runtimeTools: opts.runtimeTools, resume: opts.resume });
         return;
       }
       render(
@@ -367,6 +406,7 @@ if (!firstArg || firstArg.startsWith("-")) {
     .option("--prompt <text>", "Run a prompt")
     .option("-d, --dev", "Output JSON (no UI)")
     .option("--force-all", "Auto-approve all tools")
+    .option("--resume", "Resume from last permission-denied tool call")
     .allowUnknownOption()
     .exitOverride();
 
@@ -379,10 +419,11 @@ if (!firstArg || firstArg.startsWith("-")) {
     prompt?: string;
     dev?: boolean;
     forceAll?: boolean;
+    resume?: boolean;
   }>();
 
-  if (opts.prompt && (opts.dev || opts.single)) {
-    runHeadless({ path: opts.path ?? ".", prompt: opts.prompt, sessionId: opts.session, single: opts.single, forceAll: opts.forceAll });
+  if ((opts.prompt || opts.resume) && (opts.dev || opts.single)) {
+    runHeadless({ path: opts.path ?? ".", prompt: opts.prompt, sessionId: opts.session, single: opts.single, forceAll: opts.forceAll ?? opts.resume, resume: opts.resume });
   } else {
     render(
       <ChatCommand
